@@ -25,6 +25,8 @@ int8_t I2Cport_readBits(uint8_t devAddr,
 {
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
+	/* Workaround, use two bytes instead of one for STM32F1 */
+	uint8_t b_array[2];
 	uint8_t b;
 
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
@@ -33,8 +35,10 @@ int8_t I2Cport_readBits(uint8_t devAddr,
 	i2cAcquireBus(&I2CD1);
 	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
 					  tx_data, 1,
-					  &b, 1, tmo);
+					  b_array, 2, tmo);
 	i2cReleaseBus(&I2CD1);
+
+	b = b_array[1];
 
 	// 01101001 read byte
 	// 76543210 bit numbers
@@ -50,6 +54,7 @@ int8_t I2Cport_readBits(uint8_t devAddr,
 	return (MSG_OK == status) ? length : -1;
 }
 
+/* Please be aware that you cannot read data with length 1 */
 int8_t	I2Cport_readBytes (uint8_t devAddr,
 		   uint8_t regAddr,
 		   uint8_t length,
@@ -88,6 +93,8 @@ bool	I2Cport_writeBit (uint8_t devAddr,
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
+	/* Workaround, use two bytes instead of one for STM32F1 */
+	uint8_t b_array[2];
 	uint8_t b;
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
@@ -95,11 +102,13 @@ bool	I2Cport_writeBit (uint8_t devAddr,
 	i2cAcquireBus(&I2CD1);
 	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
 					  tx_data, 1,
-					  &b, 1, tmo);
+					  b_array, 2, tmo);
 
 	osalDbgCheck(MSG_OK == status);
 	if (status != MSG_OK)
 		return false;
+
+	b = b_array[1];
 
 	/* write the corresponding bit in temp variable */
 	b = (data != 0) ? (b | (1 << bitNum)) : (b & ~(1 << bitNum));
@@ -140,6 +149,8 @@ bool	I2Cport_writeBits (uint8_t devAddr,
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
+	/* Workaround, use two bytes instead of one for STM32F1 */
+	uint8_t b_array[2];
 	uint8_t b;
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
@@ -147,11 +158,13 @@ bool	I2Cport_writeBits (uint8_t devAddr,
 	i2cAcquireBus(&I2CD1);
 	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
 					  tx_data, 1,
-					  &b, 1, tmo);
+					  b_array, 2, tmo);
 
 	osalDbgCheck(MSG_OK == status);
 	if (status != MSG_OK)
 		return false;
+
+	b = b_array[1];
 
 	uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
 	data <<= (bitStart - length + 1); // shift data into correct position
