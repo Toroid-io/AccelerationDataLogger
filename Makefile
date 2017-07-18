@@ -113,6 +113,7 @@ CSRC = $(STARTUPSRC) \
        $(PLATFORMSRC) \
        $(BOARDSRC) \
        $(TESTSRC) \
+	   $(CHIBIOS)/os/hal/lib/streams/chprintf.c \
 	   I2Cdev.c \
 	   MPU6050.c \
 	   ADXL345.c \

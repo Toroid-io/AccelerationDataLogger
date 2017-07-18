@@ -44,6 +44,7 @@ const uint8_t ADXL345_devAddr = ADXL345_DEFAULT_ADDRESS;
 void ADXL345_initialize() {
     I2Cport_writeByte(ADXL345_devAddr, ADXL345_RA_POWER_CTL, 0); // reset all power settings
     ADXL345_setRate(ADXL345_RATE_800);
+    ADXL345_setRange(ADXL345_RANGE_2G);
     ADXL345_setAutoSleepEnabled(true);
     ADXL345_setMeasureEnabled(true);
 }

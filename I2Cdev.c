@@ -38,7 +38,7 @@ int8_t I2Cport_readBits(uint8_t devAddr,
 					  b_array, 2, tmo);
 	i2cReleaseBus(&I2CD1);
 
-	b = b_array[1];
+	b = b_array[0];
 
 	// 01101001 read byte
 	// 76543210 bit numbers
@@ -76,6 +76,30 @@ int8_t	I2Cport_readBytes (uint8_t devAddr,
 	return (MSG_OK == status) ? length : -1;
 }
 
+int8_t	I2Cport_readByte (uint8_t devAddr,
+		   uint8_t regAddr,
+		   uint8_t *data)
+{
+	uint8_t tmp[2];
+
+	msg_t status = MSG_OK;
+	systime_t tmo = MS2ST(4);
+
+	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
+
+	/* receiving */
+	i2cAcquireBus(&I2CD1);
+	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+					  tx_data, 1,
+					  tmp, 2, tmo);
+	i2cReleaseBus(&I2CD1);
+
+	*data = tmp[0];
+
+	osalDbgCheck(MSG_OK == status);
+	return (MSG_OK == status) ? 1 : -1;
+}
+
 
 
 /** write a single bit in an 8-bit device register.
@@ -108,7 +132,7 @@ bool	I2Cport_writeBit (uint8_t devAddr,
 	if (status != MSG_OK)
 		return false;
 
-	b = b_array[1];
+	b = b_array[0];
 
 	/* write the corresponding bit in temp variable */
 	b = (data != 0) ? (b | (1 << bitNum)) : (b & ~(1 << bitNum));
@@ -164,7 +188,7 @@ bool	I2Cport_writeBits (uint8_t devAddr,
 	if (status != MSG_OK)
 		return false;
 
-	b = b_array[1];
+	b = b_array[0];
 
 	uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
 	data <<= (bitStart - length + 1); // shift data into correct position
