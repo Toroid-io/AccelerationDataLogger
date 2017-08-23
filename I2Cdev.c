@@ -17,7 +17,8 @@ static uint8_t tx_data[8];
  * @param timeout Optional read timeout in milliseconds (0 to disable, leave off to use default class value in I2Cdev::readTimeout)
  * @return Status of read operation (true = success)
  */
-int8_t I2Cport_readBits(uint8_t devAddr,
+int8_t I2Cport_readBits(I2CDriver *i2cp,
+			uint8_t devAddr,
 			uint8_t regAddr,
 			uint8_t bitStart,
 			uint8_t length,
@@ -33,7 +34,7 @@ int8_t I2Cport_readBits(uint8_t devAddr,
 
 	/* receiving */
 	i2cAcquireBus(&I2CD1);
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
 					  b_array, 2, tmo);
 	i2cReleaseBus(&I2CD1);
@@ -55,10 +56,11 @@ int8_t I2Cport_readBits(uint8_t devAddr,
 }
 
 /* Please be aware that you cannot read data with length 1 */
-int8_t	I2Cport_readBytes (uint8_t devAddr,
-		   uint8_t regAddr,
-		   uint8_t length,
-		   uint8_t *data)
+int8_t	I2Cport_readBytes (I2CDriver *i2cp,
+			   uint8_t devAddr,
+			   uint8_t regAddr,
+			   uint8_t length,
+			   uint8_t *data)
 {
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
@@ -66,19 +68,20 @@ int8_t	I2Cport_readBytes (uint8_t devAddr,
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
 	/* receiving */
-	i2cAcquireBus(&I2CD1);
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	i2cAcquireBus(i2cp);
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
 					  data, length, tmo);
-	i2cReleaseBus(&I2CD1);
+	i2cReleaseBus(i2cp);
 
 	osalDbgCheck(MSG_OK == status);
 	return (MSG_OK == status) ? length : -1;
 }
 
-int8_t	I2Cport_readByte (uint8_t devAddr,
-		   uint8_t regAddr,
-		   uint8_t *data)
+int8_t	I2Cport_readByte (I2CDriver *i2cp,
+			  uint8_t devAddr,
+			  uint8_t regAddr,
+			  uint8_t *data)
 {
 	uint8_t tmp[2];
 
@@ -88,11 +91,11 @@ int8_t	I2Cport_readByte (uint8_t devAddr,
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
 	/* receiving */
-	i2cAcquireBus(&I2CD1);
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	i2cAcquireBus(i2cp);
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
 					  tmp, 2, tmo);
-	i2cReleaseBus(&I2CD1);
+	i2cReleaseBus(i2cp);
 
 	*data = tmp[0];
 
@@ -109,10 +112,11 @@ int8_t	I2Cport_readByte (uint8_t devAddr,
  * @param value New bit value to write
  * @return Status of operation (true = success)
  */
-bool	I2Cport_writeBit (uint8_t devAddr,
-		  uint8_t regAddr,
-		  uint8_t bitNum,
-		  uint8_t data)
+bool	I2Cport_writeBit (I2CDriver *i2cp,
+			  uint8_t devAddr,
+			  uint8_t regAddr,
+			  uint8_t bitNum,
+			  uint8_t data)
 {
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
@@ -123,8 +127,8 @@ bool	I2Cport_writeBit (uint8_t devAddr,
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
 	/* get register value */
-	i2cAcquireBus(&I2CD1);
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	i2cAcquireBus(i2cp);
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
 					  b_array, 2, tmo);
 
@@ -140,10 +144,10 @@ bool	I2Cport_writeBit (uint8_t devAddr,
 	tx_data[1] = b;
 
 	/* send the new register value */
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 2,
 					  NULL, 0, tmo);
-	i2cReleaseBus(&I2CD1);
+	i2cReleaseBus(i2cp);
 	osalDbgCheck(MSG_OK == status);
 
 	return (MSG_OK == status) ? true : false;
@@ -157,11 +161,12 @@ bool	I2Cport_writeBit (uint8_t devAddr,
  * @param data Right-aligned value to write
  * @return Status of operation (true = success)
  */
-bool	I2Cport_writeBits (uint8_t devAddr,
-		   uint8_t regAddr,
-		   uint8_t bitStart,
-		   uint8_t length,
-		   uint8_t data)
+bool	I2Cport_writeBits (I2CDriver *i2cp,
+			   uint8_t devAddr,
+			   uint8_t regAddr,
+			   uint8_t bitStart,
+			   uint8_t length,
+			   uint8_t data)
 {
 	//      010 value to write
 	// 76543210 bit numbers
@@ -179,8 +184,8 @@ bool	I2Cport_writeBits (uint8_t devAddr,
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
 	/* get register value */
-	i2cAcquireBus(&I2CD1);
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	i2cAcquireBus(i2cp);
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
 					  b_array, 2, tmo);
 
@@ -199,10 +204,10 @@ bool	I2Cport_writeBits (uint8_t devAddr,
 	tx_data[0] = regAddr| AUTO_INCREMENT_BIT;
 	tx_data[1] = b;
 
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 2,
 					  NULL, 0, tmo);
-	i2cReleaseBus(&I2CD1);
+	i2cReleaseBus(i2cp);
 	osalDbgCheck(MSG_OK == status);
 
 	return (MSG_OK == status) ? true : false;
@@ -214,22 +219,23 @@ bool	I2Cport_writeBits (uint8_t devAddr,
  * @param data New byte value to write
  * @return Status of operation (true = success)
  */
-bool I2Cport_writeByte(uint8_t devAddr,
+bool I2Cport_writeByte(I2CDriver *i2cp,
+		       uint8_t devAddr,
 		       uint8_t regAddr,
 		       uint8_t data) {
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
-	i2cAcquireBus(&I2CD1);
+	i2cAcquireBus(i2cp);
 
 	tx_data[0] = regAddr| AUTO_INCREMENT_BIT;
 	tx_data[1] = data;
 
 	/* send the new register value */
-	status = i2cMasterTransmitTimeout(&I2CD1, devAddr,
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 2,
 					  NULL, 0, tmo);
-	i2cReleaseBus(&I2CD1);
+	i2cReleaseBus(i2cp);
 	osalDbgCheck(MSG_OK == status);
 
 	return (MSG_OK == status) ? true : false;

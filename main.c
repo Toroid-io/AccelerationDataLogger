@@ -4,23 +4,20 @@
 #include "MPU6050.h"
 #include "ADXL345.h"
 
-
 /* We use these lines with leds */
-#define LINE_B12 PAL_LINE(GPIOB, 12U)
-#define LINE_B14 PAL_LINE(GPIOB, 14U)
-#define LINE_A8 PAL_LINE(GPIOA, 8U)
-#define LINE_A10 PAL_LINE(GPIOA, 10U)
-#define LINE_C13 PAL_LINE(GPIOC, 13U)
-#define LED_0 LINE_B12
-#define LED_1 LINE_B14
-#define LED_2 LINE_A8
-#define LED_ONBOARD LINE_C13
-#define LED_WARNING LINE_A10
+#define LED_0 PAL_LINE(GPIOA, 3U)
+#define LED_1 PAL_LINE(GPIOA, 2U)
+#define LED_2 PAL_LINE(GPIOA, 1U)
+#define LED_ONBOARD PAL_LINE(GPIOC, 13U)
 /* We use this lines with I2C */
-#define I2C_SCL_PORT GPIOB
-#define I2C_SCL_PIN 6
-#define I2C_SDA_PORT GPIOB
-#define I2C_SDA_PIN 7
+#define I2C1_SCL_PORT GPIOB
+#define I2C1_SCL_PIN 6
+#define I2C1_SDA_PORT GPIOB
+#define I2C1_SDA_PIN 7
+//#define I2C2_SCL_PORT GPIOB
+//#define I2C2_SCL_PIN 10
+//#define I2C2_SDA_PORT GPIOB
+//#define I2C2_SDA_PIN 11
 /* We use this lines with SPI */
 #define GPIOA_SPI1NSS           4
 #define SPI_CS_PORT   GPIOA
@@ -33,16 +30,9 @@
 #define SPI_MOSI_PIN  7
 #define SPI_HOLD_PORT GPIOB
 #define SPI_HOLD_PIN  0
-/* We use these lines to indicate task start and stop */
-#define LINE_B3 PAL_LINE(GPIOB, 3U)
-#define LINE_B4 PAL_LINE(GPIOB, 4U)
-#define LINE_B5 PAL_LINE(GPIOB, 5U)
-#define LOGIC_0 LINE_B5
-#define LOGIC_1 LINE_B4
-#define LOGIC_2 LINE_B3
 
 /* the mailboxes are used to send information into the spi thread */
-#define NUM_BUFFERS 4
+#define NUM_BUFFERS 2
 #define BUFFERS_SIZE 16
 static char buffers[NUM_BUFFERS][BUFFERS_SIZE];
 static msg_t free_buffers_queue[NUM_BUFFERS];
@@ -50,30 +40,36 @@ static mailbox_t free_buffers;
 static msg_t filled_buffers_queue[NUM_BUFFERS];
 static mailbox_t filled_buffers;
 
-/* Using this mutex is not strictly required (because the I2C driver already has
- * mutual exclusion, but it is handy for debugging */
-static MUTEX_DECL(i2c_device_mutex);
-
 /* Mutex used to analyze the amount of memory available */
 //#define SPI_RAM_SIZE 131072
-#define SPI_RAM_SIZE 96*1024
+#define SPI_RAM_SIZE 80*1024
 static MUTEX_DECL(memoryCounter_mutex);
 volatile int32_t memoryCounter;
 
-/* Various binary semaphores to synchronize stuff */
-static BSEMAPHORE_DECL(mpu_blink, 1);
-static BSEMAPHORE_DECL(adxl_blink, 1);
+/* Various semaphores to synchronize stuff */
+static BSEMAPHORE_DECL(accel_blink, 1);
 static BSEMAPHORE_DECL(i2c_mpu, 1);
 static BSEMAPHORE_DECL(i2c_adxl, 1);
 static BSEMAPHORE_DECL(writeSerial, 1);
+static SEMAPHORE_DECL(i2c_sync, 0);
 
 /*
  * I2C config
+ *
  */
 static const I2CConfig i2cfg1 = {
 	OPMODE_I2C,
+	200000,
 	//100000,
-	250000,
+	//FAST_DUTY_CYCLE_16_9,
+	FAST_DUTY_CYCLE_2,
+	//STD_DUTY_CYCLE,
+};
+
+static const I2CConfig i2cfg2 = {
+	OPMODE_I2C,
+	//100000,
+	200000,
 	//FAST_DUTY_CYCLE_16_9,
 	FAST_DUTY_CYCLE_2,
 	//STD_DUTY_CYCLE,
@@ -88,8 +84,9 @@ static const SPIConfig ls_spicfg = {
   GPIOA_SPI1NSS,
   SPI_CR1_BR_2 | SPI_CR1_BR_1
 };
+
 /*
- * SPI TX and RX buffers.
+ * SPI RX buffer
  */
 static union Rxbuf {
 	uint8_t c[32];
@@ -101,7 +98,6 @@ static union Rxbuf {
  */
 static void gpt3cb(GPTDriver *gptp) {
 	(void)gptp;
-	/* Tell the i2c thread that it can run! */
 	chBSemSignal(&i2c_mpu);
 	chBSemSignal(&i2c_adxl);
 }
@@ -115,36 +111,35 @@ static const GPTConfig gpt3cfg = {
 /*
  * MPU6050  polling thread.
  */
-static THD_WORKING_AREA(waThread1, 128);
+static THD_WORKING_AREA(waThread1, 256);
 static THD_FUNCTION(Thread1, arg) {
 
   (void)arg;
   void *pbuf;
 
   chRegSetThreadName("MPU6050_Poll");
-  palSetLineMode(LOGIC_0, PAL_MODE_OUTPUT_PUSHPULL);
-  palSetLine(LOGIC_0);
 
   int16_t ax, ay, az;
   int16_t gx, gy, gz;
 
   int16_t i;
 
-  chMtxLock(&i2c_device_mutex);
+ // MPU6050_reset();
   MPU6050_initialize();
+  MPU6050_setSleepEnabled(false);
+  chThdSleepMilliseconds(100);
   // verify connection
-  if (MPU6050_testConnection())
-    chprintf((BaseSequentialStream *)&SD2,"MPU OK\r\n");
-  else
-    chprintf((BaseSequentialStream *)&SD2,"MPU FAIL\r\n");
-  chMtxUnlock(&i2c_device_mutex);
+  while (MPU6050_testConnection() == false) {
+    chprintf((BaseSequentialStream *)&SD1,"MPU FAIL\r\n");
+    chThdSleepMilliseconds(1000);
+  }
+  chprintf((BaseSequentialStream *)&SD1,"MPU OK\r\n");
 
   /* Calibration loop */
   int32_t calibrationAccumulator[6] = {0, 0, 0, 0, 0, 0};
   for (i = 0; i < 128; ++i) {
-    chMtxLock(&i2c_device_mutex);
+    chThdSleepMilliseconds(10);
     MPU6050_getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-    chMtxUnlock(&i2c_device_mutex);
     calibrationAccumulator[0] += ax;
     calibrationAccumulator[1] += ay;
     calibrationAccumulator[2] += az;
@@ -161,14 +156,14 @@ static THD_FUNCTION(Thread1, arg) {
   cgy = calibrationAccumulator[4] / 128;
   cgz = calibrationAccumulator[5] / 128;
 
+  /* We finished the calibration here */
+  chprintf((BaseSequentialStream *)&SD1,"MPU Calibrated\r\n");
+  chSemSignal(&i2c_sync);
+
   while (true) {
-    /* wait until the timer says */
+    /* wait until the timer starts */
     chBSemWait(&i2c_mpu);
-    chMtxLock(&i2c_device_mutex);
-    palClearLine(LOGIC_0);
     MPU6050_getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
-    palSetLine(LOGIC_0);
-    chMtxUnlock(&i2c_device_mutex);
     ax -= cax;
     ay -= cay;
     az -= caz;
@@ -193,41 +188,14 @@ static THD_FUNCTION(Thread1, arg) {
       //chsnprintf((char *)pbuf, BUFFERS_SIZE, "A:%u:%d\r\n", counter++, ax);
       (void)chMBPost(&filled_buffers, (msg_t)pbuf, TIME_INFINITE);
     }
-    if ((az > 20000) || (az < -20000)) {
-      chBSemSignal(&mpu_blink);
+    if ((az > 16384) || (az < -16384)) {
+      chBSemSignal(&accel_blink);
     }
-
-    // these methods (and a few others) are also available
-    //accelgyro.getAcceleration(&ax, &ay, &az);
-    //accelgyro.getRotation(&gx, &gy, &gz);
-
-#if 0
-    #ifdef OUTPUT_READABLE_ACCELGYRO
-        // display tab-separated accel/gyro x/y/z values
-        Serial.print("a/g:\t");
-        Serial.print(ax); Serial.print("\t");
-        Serial.print(ay); Serial.print("\t");
-        Serial.print(az); Serial.print("\t");
-        Serial.print(gx); Serial.print("\t");
-        Serial.print(gy); Serial.print("\t");
-        Serial.println(gz);
-    #endif
-
-    #ifdef OUTPUT_BINARY_ACCELGYRO
-        Serial.write((uint8_t)(ax >> 8)); Serial.write((uint8_t)(ax & 0xFF));
-        Serial.write((uint8_t)(ay >> 8)); Serial.write((uint8_t)(ay & 0xFF));
-        Serial.write((uint8_t)(az >> 8)); Serial.write((uint8_t)(az & 0xFF));
-        Serial.write((uint8_t)(gx >> 8)); Serial.write((uint8_t)(gx & 0xFF));
-        Serial.write((uint8_t)(gy >> 8)); Serial.write((uint8_t)(gy & 0xFF));
-        Serial.write((uint8_t)(gz >> 8)); Serial.write((uint8_t)(gz & 0xFF));
-    #endif
-#endif
   }
 }
 
 /*
  * ADXL345  polling thread.
- * TODO: Revisar polling speed!
  */
 static THD_WORKING_AREA(waThread2, 128);
 static THD_FUNCTION(Thread2, arg) {
@@ -236,64 +204,49 @@ static THD_FUNCTION(Thread2, arg) {
   void *pbuf;
 
   chRegSetThreadName("ADXL345_Poll");
-  palSetLineMode(LOGIC_1, PAL_MODE_OUTPUT_PUSHPULL);
-  palSetLineMode(LED_WARNING, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);
-  palSetLine(LOGIC_1);
-  palClearLine(LED_WARNING);
 
   int16_t ax, ay, az;
-  int16_t i;
+  int16_t cax, cay, caz;
+  uint16_t i;
 
-  chMtxLock(&i2c_device_mutex);
   ADXL345_initialize();
   // verify connection
-  if (ADXL345_testConnection())
-    chprintf((BaseSequentialStream *)&SD2,"ADXL OK\r\n");
-  else
-    chprintf((BaseSequentialStream *)&SD2,"ADXL FAIL\r\n");
-  chMtxUnlock(&i2c_device_mutex);
+  while (ADXL345_testConnection() == false) {
+    chprintf((BaseSequentialStream *)&SD1,"ADXL FAIL\r\n");
+    chThdSleepMilliseconds(1000);
+  }
+  chprintf((BaseSequentialStream *)&SD1,"ADXL OK\r\n");
 
   /* Calibration loop */
   int32_t calibrationAccumulator[3] = {0, 0, 0};
   for (i = 0; i < 128; ++i) {
-    chMtxLock(&i2c_device_mutex);
+    chThdSleepMilliseconds(2);
     ADXL345_getAcceleration(&ax, &ay, &az);
-    chMtxUnlock(&i2c_device_mutex);
     calibrationAccumulator[0] += ax;
     calibrationAccumulator[1] += ay;
     calibrationAccumulator[2] += az;
   }
 
-  int16_t cax, cay, caz;
   cax = calibrationAccumulator[0] / 128;
   cay = calibrationAccumulator[1] / 128;
   caz = calibrationAccumulator[2] / 128;
 
-  for (i = 0; i < 4; ++i) {
-	  palSetLine(LED_WARNING);
-	  chThdSleepMilliseconds(500);
-	  palClearLine(LED_WARNING);
-	  chThdSleepMilliseconds(500);
-  }
-
-  /* This is a little bit dirty, but this is the second started tread
-   * FIXME
-   */
-  gptStart(&GPTD3, &gpt3cfg);
-  gptStartContinuous(&GPTD3, 1250); // Timer interrupt at 800Hz
+  /* We finished the calibration here*/
+  chprintf((BaseSequentialStream *)&SD1,"ADXL Calibrated\r\n");
+  chSemSignal(&i2c_sync);
 
   // read raw accel measurements from device
+  i = 0;
   while (true) {
     /* wait until the timer says */
+    palClearLine(LED_1);
     chBSemWait(&i2c_adxl);
-    chMtxLock(&i2c_device_mutex);
-    palClearLine(LOGIC_1);
+    palSetLine(LED_1);
     ADXL345_getAcceleration(&ax, &ay, &az);
-    palSetLine(LOGIC_1);
-    chMtxUnlock(&i2c_device_mutex);
     ax -= cax;
     ay -= cay;
     az -= caz;
+
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
       message[0]  = 'A';
@@ -303,18 +256,17 @@ static THD_FUNCTION(Thread2, arg) {
       message[4]  = (char)((ay >> 8) & 0xFF);
       message[5]  = (char)((az) & 0xFF);
       message[6]  = (char)((az >> 8) & 0xFF);
-      //chsnprintf((char *)pbuf, BUFFERS_SIZE, "A:%u:%d\r\n", counter++, ax);
       (void)chMBPost(&filled_buffers, (msg_t)pbuf, TIME_INFINITE);
     }
 
-    if ((ax > 75) || (ax < -750)) {
-      chBSemSignal(&adxl_blink);
+    if ((az > 250) || (az < -250)) {
+      chBSemSignal(&accel_blink);
     }
   }
 }
 
 /*
- * MPU blinker thread
+ * Accelerometer blink thread
  */
 static THD_WORKING_AREA(waThread3, 128);
 static THD_FUNCTION(Thread3, arg) {
@@ -322,9 +274,10 @@ static THD_FUNCTION(Thread3, arg) {
   (void)arg;
   chRegSetThreadName("reblinker");
   palSetLineMode(LED_0, PAL_MODE_OUTPUT_OPENDRAIN);
+  palSetLine(LED_0);
 
   while (true) {
-    chBSemWait(&mpu_blink);
+    chBSemWait(&accel_blink);
     palClearLine(LED_0);
     chThdSleepMilliseconds(1);
     palSetLine(LED_0);
@@ -332,23 +285,32 @@ static THD_FUNCTION(Thread3, arg) {
   }
 }
 
-/*
- * ADXL blinker thread
- */
 static THD_WORKING_AREA(waThread4, 128);
 static THD_FUNCTION(Thread4, arg) {
-
   (void)arg;
-  chRegSetThreadName("reblinker");
-  palSetLineMode(LED_1, PAL_MODE_OUTPUT_OPENDRAIN);
+  uint8_t i;
 
-  while (true) {
-    chBSemWait(&adxl_blink);
-    palClearLine(LED_1);
-    chThdSleepMilliseconds(1);
-    palSetLine(LED_1);
-    chThdSleepMilliseconds(1);
+  chRegSetThreadName("Synchronization Thread");
+
+  palSetLineMode(LED_1, PAL_MODE_OUTPUT_OPENDRAIN);
+  palSetLine(LED_1);
+
+  /* Wait until both accelerometers are configured and calibrated */
+  chSemWait(&i2c_sync);
+  chSemWait(&i2c_sync);
+
+  for (i = 0; i < 4; ++i) {
+	  palClearLine(LED_1);
+	  chThdSleepMilliseconds(500);
+	  palSetLine(LED_1);
+	  chThdSleepMilliseconds(500);
   }
+
+  chprintf((BaseSequentialStream *)&SD1,"Acquiring...\r\n");
+
+  /* Start the timer */
+  gptStart(&GPTD3, &gpt3cfg);
+  gptStartContinuous(&GPTD3, 1250); // Timer interrupt at 800Hz
 }
 
 
@@ -382,7 +344,6 @@ static THD_FUNCTION(Thread5, arg) {
     }
     else {
       char *message = (char *)pbuf;
-      palClearLine(LED_2);
       /* Write the address into the command buffer */
       writeCommandAddress[1] = (memoryCounter >> 16) & 0x1;
       writeCommandAddress[2] = (memoryCounter >>  8) & 0xFF;
@@ -395,11 +356,12 @@ static THD_FUNCTION(Thread5, arg) {
 	spiSelect(&SPID1);                  /* Slave Select assertion.          */
         spiSend(&SPID1, 4, writeCommandAddress);          /* Atomic transfer operations.      */
         spiSend(&SPID1, 7, message);          /* Atomic transfer operations.      */
+	spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
+	spiReleaseBus(&SPID1);              /* Ownership release.               */
         chMtxLock(&memoryCounter_mutex);
 	memoryCounter += 7;
 	chMtxUnlock(&memoryCounter_mutex);
-      }
-      else if (message[0] == 'M') {
+      } else if (message[0] == 'M') {
         if ((memoryCounter + 13) >= SPI_RAM_SIZE)
 		break;
 	spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
@@ -407,24 +369,23 @@ static THD_FUNCTION(Thread5, arg) {
 	spiSelect(&SPID1);                  /* Slave Select assertion.          */
         spiSend(&SPID1, 4, writeCommandAddress);          /* Atomic transfer operations.      */
         spiSend(&SPID1, 13, message);          /* Atomic transfer operations.      */
+	spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
+	spiReleaseBus(&SPID1);              /* Ownership release.               */
         chMtxLock(&memoryCounter_mutex);
 	memoryCounter += 13;
 	chMtxUnlock(&memoryCounter_mutex);
+      } else {
+        chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown sensor\r\n");
       }
-      spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
-      spiReleaseBus(&SPID1);              /* Ownership release.               */
-
-      /* Processing incoming frame, print it out!*/
-      //chprintf(chp, pbuf);
-      palSetLine(LED_2);
 
       /* Returning the buffer to the free buffers pool.*/
       (void)chMBPost(&free_buffers, (msg_t)pbuf, TIME_INFINITE);
 
     }
   }
+
   /* After finishing acquitision, go here
-   * I2C threads will hang because they will run out of mailboxes
+   * I2C threads will hang after a while because they will run out of mailboxes
    */
   palSetLine(LED_2);
   //chThdSleepMilliseconds(5000);
@@ -437,12 +398,12 @@ static THD_FUNCTION(Thread5, arg) {
   }
 }
 
-static THD_WORKING_AREA(waThread6, 128);
+static THD_WORKING_AREA(waThread6, 256);
 static THD_FUNCTION(Thread6, arg) {
   (void)arg;
   chRegSetThreadName("UART printer");
 
-  palSetLineMode(LED_WARNING, PAL_MODE_OUTPUT_OPENDRAIN);
+  palSetLineMode(LED_0, PAL_MODE_OUTPUT_OPENDRAIN);
   chBSemWait(&writeSerial);
 
   char readCommandAddress[5];
@@ -452,19 +413,19 @@ static THD_FUNCTION(Thread6, arg) {
   readCommandAddress[3] = 0;
   readCommandAddress[3] = 0; // Just in case
 
+  /* We will block the SPI device while printing */
   spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
   spiStart(&SPID1, &ls_spicfg);       /* Setup transfer parameters.       */
   spiSelect(&SPID1);                  /* Slave Select assertion.          */
   spiExchange(&SPID1, 5, readCommandAddress, rxbuf.c);
   char id = rxbuf.c[4];
   while (true) {
-      palClearLine(LED_WARNING);
       if (id == 'A') {
         spiReceive(&SPID1, 6, rxbuf.c);          /* Atomic transfer operations.      */
         chMtxLock(&memoryCounter_mutex);
 	memoryCounter -= 7;
 	chMtxUnlock(&memoryCounter_mutex);
-	chprintf((BaseSequentialStream *)&SD2,"%ld:A:%d:%d:%d;\r\n",
+	chprintf((BaseSequentialStream *)&SD1,"%ld:A:%d:%d:%d;\r\n",
 		 memoryCounter,
 		 rxbuf.i[0],
 		 rxbuf.i[1],
@@ -475,7 +436,7 @@ static THD_FUNCTION(Thread6, arg) {
         chMtxLock(&memoryCounter_mutex);
 	memoryCounter -= 13;
 	chMtxUnlock(&memoryCounter_mutex);
-	chprintf((BaseSequentialStream *)&SD2,"%ld:M:%d:%d:%d:%d:%d:%d;\r\n",
+	chprintf((BaseSequentialStream *)&SD1,"%ld:M:%d:%d:%d:%d:%d:%d;\r\n",
 		 memoryCounter,
 		 rxbuf.i[0],
 		 rxbuf.i[1],
@@ -483,20 +444,21 @@ static THD_FUNCTION(Thread6, arg) {
 		 rxbuf.i[3],
 		 rxbuf.i[4],
 		 rxbuf.i[5]);
+      } else {
+	chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown device in memory\r\n");
       }
-      palSetLine(LED_WARNING);
       if (memoryCounter <= 0)
 	      break;
       spiReceive(&SPID1, 1, &id);          /* Atomic transfer operations.      */
-
   }
   spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
   spiReleaseBus(&SPID1);              /* Ownership release.               */
-  chprintf((BaseSequentialStream *)&SD2,"We're all done\r\n");
+
+  chprintf((BaseSequentialStream *)&SD1,"We're all done\r\n");
   while (true) {
-    palClearLine(LED_WARNING);
+    palClearLine(LED_0);
     chThdSleepMilliseconds(500);
-    palSetLine(LED_WARNING);
+    palSetLine(LED_0);
     chThdSleepMilliseconds(500);
   }
 }
@@ -542,20 +504,25 @@ int main(void) {
   chSysInit();
 
   /*
-   * Activates the serial driver 2 using the driver default configuration.
+   * Activates the serial driver 1 using the driver default configuration.
    */
-  sdStart(&SD2, NULL);
+  sdStart(&SD1, NULL);
 
-  chprintf((BaseSequentialStream *)&SD2,"Starting...\r\n");
-  palSetPadMode(GPIOA, 2, PAL_MODE_STM32_ALTERNATE_PUSHPULL);   /* SCL */
-  palSetPadMode(GPIOA, 3, PAL_MODE_STM32_ALTERNATE_PUSHPULL);   /* SCL */
+  chprintf((BaseSequentialStream *)&SD1,"Starting...\r\n");
+  palSetPadMode(GPIOA, 9, PAL_MODE_STM32_ALTERNATE_PUSHPULL);   /* SCL */
+  palSetPadMode(GPIOA, 10, PAL_MODE_STM32_ALTERNATE_PUSHPULL);   /* SCL */
+
+  osalThreadSleepMilliseconds(500);
 
   /*
    * I2C I/O pins setup.
    */
-  palSetPadMode(GPIOB, 6, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SCL */
-  palSetPadMode(GPIOB, 7, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SDA */
+  palSetPadMode(I2C1_SCL_PORT, I2C1_SCL_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SCL */
+  palSetPadMode(I2C1_SDA_PORT, I2C1_SDA_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SDA */
   i2cStart(&I2CD1, &i2cfg1);
+  //palSetPadMode(I2C2_SCL_PORT, I2C2_SCL_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SCL */
+  //palSetPadMode(I2C2_SDA_PORT, I2C2_SDA_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SDA */
+  //i2cStart(&I2CD2, &i2cfg2);
 
   /*
    * SPI1 I/O pins setup.
@@ -573,58 +540,22 @@ int main(void) {
   for (i = 0; i < NUM_BUFFERS; i++)
     (void)chMBPost(&free_buffers, (msg_t)&buffers[i], TIME_INFINITE);
 
-  osalThreadSleepMilliseconds(1000);
+  osalThreadSleepMilliseconds(5000);
   /*
    * Creates the threads
    */
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL); // MPU
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
-  chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO-1, Thread3, NULL); // MPU blink
-  chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO-1, Thread4, NULL); // ADXL blink
+  chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO-1, Thread3, NULL); // Accel blink
+  chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO+2, Thread4, NULL); // Synchronization Thread
   chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
   chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
-  chThdCreateStatic(waThread7, sizeof(waThread7), NORMALPRIO,   Thread7, NULL); // Blink
+  chThdCreateStatic(waThread7, sizeof(waThread7), NORMALPRIO-10,   Thread7, NULL); // Blink
 
   /*
    * Normal main() thread activity
    */
-  //int16_t ax, ay, az;
-  //int16_t gx, gy, gz;
   while (true) {
-    //osalThreadSleepMilliseconds(5000);
-    //MPU6050_initialize();
-    osalThreadSleepMilliseconds(50);
-    //MPU6050_getMotion6(&ax, &ay, &az, &gx, &gy, &gz);
+    osalThreadSleepMilliseconds(500);
   }
 }
-
-#if 0
-#include "math.h"
-#include "string.h"
-#include "chprintf.h"
-
-
-/*
- * Application entry point.
- */
-int main(void) {
-
- /* Create and pre-fill the mailboxes.*/
-  chMBObjectInit(&filled_buffers, filled_buffers_queue, NUM_BUFFERS);
-  chMBObjectInit(&free_buffers, free_buffers_queue, NUM_BUFFERS);
-  uint8_t i;
-  for (i = 0; i < NUM_BUFFERS; i++)
-    (void)chMBPost(&free_buffers, (msg_t)&buffers[i], TIME_INFINITE);
-
-  /*
-   * Activates the serial driver 1 using the driver default configuration.
-   */
-  sdStart(&SD1, NULL);
-
-
-  while (true) {
-	  chThdSleepMilliseconds(250);
-  }
-  return 0;
-}
-#endif
