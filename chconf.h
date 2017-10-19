@@ -39,14 +39,14 @@
  * @brief   System time counter resolution.
  * @note    Allowed values are 16 or 32 bits.
  */
-#define CH_CFG_ST_RESOLUTION                16
+#define CH_CFG_ST_RESOLUTION                32
 
 /**
  * @brief   System tick frequency.
  * @details Frequency of the system timer that drives the system ticks. This
  *          setting also defines the system tick time unit.
  */
-#define CH_CFG_ST_FREQUENCY                 2000
+#define CH_CFG_ST_FREQUENCY                 10000
 
 /**
  * @brief   Time delta constant for the tick-less mode.
@@ -138,7 +138,7 @@
  *
  * @note    The default is @p TRUE.
  */
-#define CH_CFG_USE_TM                       TRUE
+#define CH_CFG_USE_TM                       FALSE
 
 /**
  * @brief   Threads registry APIs.
@@ -323,16 +323,16 @@
 /**
  * @brief   Debug option, kernel statistics.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  */
-#define CH_DBG_STATISTICS                   TRUE
+#define CH_DBG_STATISTICS                   FALSE
 
 /**
  * @brief   Debug option, system state check.
  * @details If enabled the correct call protocol for system APIs is checked
  *          at runtime.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  */
 #define CH_DBG_SYSTEM_STATE_CHECK           TRUE
 
@@ -341,7 +341,7 @@
  * @details If enabled then the checks on the API functions input
  *          parameters are activated.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  */
 #define CH_DBG_ENABLE_CHECKS                TRUE
 
@@ -351,7 +351,7 @@
  *          activated. This includes consistency checks inside the kernel,
  *          runtime anomalies and port-defined checks.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  */
 #define CH_DBG_ENABLE_ASSERTS               TRUE
 
@@ -360,7 +360,7 @@
  * @details If enabled then the context switch circular trace buffer is
  *          activated.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  */
 #define CH_DBG_ENABLE_TRACE                 TRUE
 
@@ -368,7 +368,7 @@
  * @brief   Debug option, stack checks.
  * @details If enabled then a runtime stack check is performed.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  * @note    The stack check is performed in a architecture/port dependent way.
  *          It may not be implemented or some ports.
  * @note    The default failure mode is to halt the system with the global
@@ -382,7 +382,7 @@
  *          value when a thread is created. This can be useful for the
  *          runtime measurement of the used stack.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  */
 #define CH_DBG_FILL_THREADS                 TRUE
 
@@ -391,7 +391,7 @@
  * @details If enabled then a field is added to the @p thread_t structure that
  *          counts the system ticks occurred while executing the thread.
  *
- * @note    The default is @p TRUE.
+ * @note    The default is @p FALSE.
  * @note    This debug option is not currently compatible with the
  *          tickless mode.
  */

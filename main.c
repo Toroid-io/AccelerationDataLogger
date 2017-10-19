@@ -4,33 +4,6 @@
 #include "MPU6050.h"
 #include "ADXL345.h"
 
-/* We use these lines with leds */
-#define LED_0 PAL_LINE(GPIOA, 3U)
-#define LED_1 PAL_LINE(GPIOA, 2U)
-#define LED_2 PAL_LINE(GPIOA, 1U)
-#define LED_ONBOARD PAL_LINE(GPIOC, 13U)
-/* We use this lines with I2C */
-#define I2C1_SCL_PORT GPIOB
-#define I2C1_SCL_PIN 6
-#define I2C1_SDA_PORT GPIOB
-#define I2C1_SDA_PIN 7
-//#define I2C2_SCL_PORT GPIOB
-//#define I2C2_SCL_PIN 10
-//#define I2C2_SDA_PORT GPIOB
-//#define I2C2_SDA_PIN 11
-/* We use this lines with SPI */
-#define GPIOA_SPI1NSS           4
-#define SPI_CS_PORT   GPIOA
-#define SPI_CS_PIN    4
-#define SPI_SCK_PORT  GPIOA
-#define SPI_SCK_PIN   5
-#define SPI_MISO_PORT GPIOA
-#define SPI_MISO_PIN  6
-#define SPI_MOSI_PORT GPIOA
-#define SPI_MOSI_PIN  7
-#define SPI_HOLD_PORT GPIOB
-#define SPI_HOLD_PIN  0
-
 /* the mailboxes are used to send information into the spi thread */
 #define NUM_BUFFERS 2
 #define BUFFERS_SIZE 16
@@ -55,34 +28,25 @@ static SEMAPHORE_DECL(i2c_sync, 0);
 
 /*
  * I2C config
+ * Fast mode (400 kHz)
  *
  */
-static const I2CConfig i2cfg1 = {
-	OPMODE_I2C,
-	200000,
-	//100000,
-	//FAST_DUTY_CYCLE_16_9,
-	FAST_DUTY_CYCLE_2,
-	//STD_DUTY_CYCLE,
+static const I2CConfig i2ccfg1 = {
+	STM32_TIMINGR_PRESC(0) |
+		STM32_TIMINGR_SCLDEL(3) |
+		STM32_TIMINGR_SDADEL(1) |
+		STM32_TIMINGR_SCLH(3)  |
+		STM32_TIMINGR_SCLL(9),
+	0,
+	0
 };
 
-static const I2CConfig i2cfg2 = {
-	OPMODE_I2C,
-	//100000,
-	200000,
-	//FAST_DUTY_CYCLE_16_9,
-	FAST_DUTY_CYCLE_2,
-	//STD_DUTY_CYCLE,
-};
-
-/*
- * Low speed SPI configuration (281.250kHz, CPHA=0, CPOL=0, MSb first).
- */
 static const SPIConfig ls_spicfg = {
-  NULL,
-  GPIOA,
-  GPIOA_SPI1NSS,
-  SPI_CR1_BR_2 | SPI_CR1_BR_1
+	NULL,
+	GPIOA,
+	GPIOA_SPI_CS_1,
+	SPI_CR1_BR_2 | SPI_CR1_BR_1,
+	0
 };
 
 /*
@@ -239,9 +203,9 @@ static THD_FUNCTION(Thread2, arg) {
   i = 0;
   while (true) {
     /* wait until the timer says */
-    palClearLine(LED_1);
+    palClearPad(GPIOB, GPIOB_LED_3);
     chBSemWait(&i2c_adxl);
-    palSetLine(LED_1);
+    palSetPad(GPIOB, GPIOB_LED_3);
     ADXL345_getAcceleration(&ax, &ay, &az);
     ax -= cax;
     ay -= cay;
@@ -273,14 +237,13 @@ static THD_FUNCTION(Thread3, arg) {
 
   (void)arg;
   chRegSetThreadName("reblinker");
-  palSetLineMode(LED_0, PAL_MODE_OUTPUT_OPENDRAIN);
-  palSetLine(LED_0);
+  palSetPad(GPIOC, GPIOC_LED_2);
 
   while (true) {
     chBSemWait(&accel_blink);
-    palClearLine(LED_0);
+    palClearPad(GPIOC, GPIOC_LED_2);
     chThdSleepMilliseconds(1);
-    palSetLine(LED_0);
+    palSetPad(GPIOC, GPIOC_LED_2);
     chThdSleepMilliseconds(1);
   }
 }
@@ -292,17 +255,16 @@ static THD_FUNCTION(Thread4, arg) {
 
   chRegSetThreadName("Synchronization Thread");
 
-  palSetLineMode(LED_1, PAL_MODE_OUTPUT_OPENDRAIN);
-  palSetLine(LED_1);
+  palSetPad(GPIOB, GPIOB_LED_4);
 
   /* Wait until both accelerometers are configured and calibrated */
   chSemWait(&i2c_sync);
   chSemWait(&i2c_sync);
 
   for (i = 0; i < 4; ++i) {
-	  palClearLine(LED_1);
+	  palClearPad(GPIOB, GPIOB_LED_4);
 	  chThdSleepMilliseconds(500);
-	  palSetLine(LED_1);
+	  palSetPad(GPIOB, GPIOB_LED_4);
 	  chThdSleepMilliseconds(500);
   }
 
@@ -323,7 +285,6 @@ static THD_FUNCTION(Thread5, arg) {
   (void)arg;
 
   chRegSetThreadName("SPI thread");
-  palSetLineMode(LED_2, PAL_MODE_OUTPUT_OPENDRAIN);
 
   char writeCommandAddress[4];
   writeCommandAddress[0] = 0x2;
@@ -387,13 +348,13 @@ static THD_FUNCTION(Thread5, arg) {
   /* After finishing acquitision, go here
    * I2C threads will hang after a while because they will run out of mailboxes
    */
-  palSetLine(LED_2);
+  palSetPad(GPIOC, GPIOC_LED_2);
   //chThdSleepMilliseconds(5000);
   chBSemSignal(&writeSerial);
   while (true) {
-	  palSetLine(LED_2);
+	  palSetPad(GPIOC, GPIOC_LED_2);
 	  chThdSleepMilliseconds(500);
-	  palClearLine(LED_2);
+	  palClearPad(GPIOC, GPIOC_LED_2);
 	  chThdSleepMilliseconds(500);
   }
 }
@@ -403,7 +364,6 @@ static THD_FUNCTION(Thread6, arg) {
   (void)arg;
   chRegSetThreadName("UART printer");
 
-  palSetLineMode(LED_0, PAL_MODE_OUTPUT_OPENDRAIN);
   chBSemWait(&writeSerial);
 
   char readCommandAddress[5];
@@ -456,9 +416,9 @@ static THD_FUNCTION(Thread6, arg) {
 
   chprintf((BaseSequentialStream *)&SD1,"We're all done\r\n");
   while (true) {
-    palClearLine(LED_0);
+    palClearPad(GPIOC, GPIOC_LED_2);
     chThdSleepMilliseconds(500);
-    palSetLine(LED_0);
+    palSetPad(GPIOC, GPIOC_LED_2);
     chThdSleepMilliseconds(500);
   }
 }
@@ -468,25 +428,6 @@ static THD_FUNCTION(Thread6, arg) {
  * This is activated after the last reading.
  * Fetches the content from the SPI RAM and prints to the serial console
  */
-
-/*
- * LED blinker thread, times are in milliseconds.
- */
-static THD_WORKING_AREA(waThread7, 128);
-static THD_FUNCTION(Thread7, arg) {
-  (void)arg;
-  chRegSetThreadName("blinker");
-
-  palSetLineMode(LED_ONBOARD, PAL_MODE_OUTPUT_OPENDRAIN);
-
-  while (true) {
-    palClearLine(LED_ONBOARD);
-    chThdSleepMilliseconds(500);
-    palSetLine(LED_ONBOARD);
-    chThdSleepMilliseconds(500);
-  }
-}
-
 
 /*
  * Application entry point.
@@ -509,29 +450,12 @@ int main(void) {
   sdStart(&SD1, NULL);
 
   chprintf((BaseSequentialStream *)&SD1,"Starting...\r\n");
-  palSetPadMode(GPIOA, 9, PAL_MODE_STM32_ALTERNATE_PUSHPULL);   /* SCL */
-  palSetPadMode(GPIOA, 10, PAL_MODE_STM32_ALTERNATE_PUSHPULL);   /* SCL */
+  //chprintf((BaseSequentialStream *)&SD1, "SYSCLK=%u\r\n", STM32_SYSCLK);
 
   osalThreadSleepMilliseconds(500);
 
-  /*
-   * I2C I/O pins setup.
-   */
-  palSetPadMode(I2C1_SCL_PORT, I2C1_SCL_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SCL */
-  palSetPadMode(I2C1_SDA_PORT, I2C1_SDA_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SDA */
-  i2cStart(&I2CD1, &i2cfg1);
-  //palSetPadMode(I2C2_SCL_PORT, I2C2_SCL_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SCL */
-  //palSetPadMode(I2C2_SDA_PORT, I2C2_SDA_PIN, PAL_MODE_STM32_ALTERNATE_OPENDRAIN);   /* SDA */
-  //i2cStart(&I2CD2, &i2cfg2);
+  i2cStart(&I2CD1, &i2ccfg1);
 
-  /*
-   * SPI1 I/O pins setup.
-   */
-  palSetPadMode(IOPORT1, 5, PAL_MODE_STM32_ALTERNATE_PUSHPULL);     /* SCK. */
-  palSetPadMode(IOPORT1, 6, PAL_MODE_STM32_ALTERNATE_PUSHPULL);     /* MISO.*/
-  palSetPadMode(IOPORT1, 7, PAL_MODE_STM32_ALTERNATE_PUSHPULL);     /* MOSI.*/
-  palSetPadMode(IOPORT1, GPIOA_SPI1NSS, PAL_MODE_OUTPUT_PUSHPULL);
-  palSetPad(IOPORT1, GPIOA_SPI1NSS);
 
   /* Create and pre-fill the mailboxes.*/
   chMBObjectInit(&filled_buffers, filled_buffers_queue, NUM_BUFFERS);
@@ -544,18 +468,20 @@ int main(void) {
   /*
    * Creates the threads
    */
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL); // MPU
-  chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
-  chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO-1, Thread3, NULL); // Accel blink
-  chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO+2, Thread4, NULL); // Synchronization Thread
-  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
-  chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
-  chThdCreateStatic(waThread7, sizeof(waThread7), NORMALPRIO-10,   Thread7, NULL); // Blink
+  //chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL); // MPU
+  //chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
+  //chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO-1, Thread3, NULL); // Accel blink
+  //chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO+2, Thread4, NULL); // Synchronization Thread
+  //chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
+  //chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
 
   /*
    * Normal main() thread activity
    */
   while (true) {
+    palClearPad(GPIOC, GPIOC_LED_1);
+    osalThreadSleepMilliseconds(500);
+    palSetPad(GPIOC, GPIOC_LED_1);
     osalThreadSleepMilliseconds(500);
   }
 }
