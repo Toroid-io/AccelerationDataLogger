@@ -39,26 +39,41 @@
 #define STM32_NO_INIT                       FALSE
 #define STM32_PVD_ENABLE                    FALSE
 #define STM32_PLS                           STM32_PLS_LEV0
-#define STM32_HSI_ENABLED                   TRUE
-#define STM32_LSI_ENABLED                   TRUE
-#define STM32_HSE_ENABLED                   FALSE
+/* HSI -> Internal RC 8MHz */
+#define STM32_HSI_ENABLED                   FALSE
+/* LSI -> Internal RC 40kHz for RTC */
+#define STM32_LSI_ENABLED                   FALSE
+/* HSE -> External clock */
+#define STM32_HSE_ENABLED                   TRUE
+/* HSI14 -> Internal RC 14MHz for ADC */
 #define STM32_HSI14_ENABLED                 TRUE
+/* HSI48 -> Internal RC 48Mhz not used */
 #define STM32_HSI48_ENABLED                 FALSE
+/* LSE -> External clock for RTC */
 #define STM32_LSE_ENABLED                   FALSE
+/* The source of Sysclk Mux */
 #define STM32_SW                            STM32_SW_PLL
-#define STM32_PLLSRC                        STM32_PLLSRC_HSI_DIV2
-#define STM32_PREDIV_VALUE                  1
+/* The source of the PLL */
+/* HSE = 8MHz -> /2 * 12 = 48MHz sysclk */
+#define STM32_PLLSRC                        STM32_PLLSRC_HSE
+#define STM32_PREDIV_VALUE                  2
 #define STM32_PLLMUL_VALUE                  12
 #define STM32_HPRE                          STM32_HPRE_DIV1
 #define STM32_PPRE                          STM32_PPRE_DIV1
+/* MCO -> External clock */
 #define STM32_MCOSEL                        STM32_MCOSEL_NOCLOCK
 #define STM32_MCOPRE                        STM32_MCOPRE_DIV1
 #define STM32_PLLNODIV                      STM32_PLLNODIV_DIV2
-#define STM32_USBSW                         STM32_USBSW_HSI48
-#define STM32_CECSW                         STM32_CECSW_HSI
-#define STM32_I2C1SW                        STM32_I2C1SW_HSI
+/* USB clock Mux */
+#define STM32_USBSW                         STM32_USBSW_PCLK
+/* CEC (HDMI control) clock Mux */
+#define STM32_CECSW                         STM32_CECSW_OFF
+/* I2C clock Mux */
+#define STM32_I2C1SW                        STM32_I2C1SW_SYSCLK
+/* USART clock Mux */
 #define STM32_USART1SW                      STM32_USART1SW_PCLK
-#define STM32_RTCSEL                        STM32_RTCSEL_LSI
+/* RTC source (HSE/32) */
+#define STM32_RTCSEL                        STM32_RTCSEL_HSEDIV
 
 /*
  * ADC driver system settings.
