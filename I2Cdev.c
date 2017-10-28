@@ -26,20 +26,17 @@ int8_t I2Cport_readBits(I2CDriver *i2cp,
 {
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
-	/* Workaround, use two bytes instead of one for STM32F1 */
-	uint8_t b_array[2];
+
 	uint8_t b;
 
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
 	/* receiving */
-	i2cAcquireBus(&I2CD1);
+	i2cAcquireBus(i2cp);
 	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
-					  b_array, 2, tmo);
-	i2cReleaseBus(&I2CD1);
-
-	b = b_array[0];
+					  &b, 1, tmo);
+	i2cReleaseBus(i2cp);
 
 	// 01101001 read byte
 	// 76543210 bit numbers
@@ -121,8 +118,6 @@ bool	I2Cport_writeBit (I2CDriver *i2cp,
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
-	/* Workaround, use two bytes instead of one for STM32F1 */
-	uint8_t b_array[2];
 	uint8_t b;
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
@@ -130,13 +125,11 @@ bool	I2Cport_writeBit (I2CDriver *i2cp,
 	i2cAcquireBus(i2cp);
 	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
-					  b_array, 2, tmo);
+					  &b, 1, tmo);
 
 	osalDbgCheck(MSG_OK == status);
 	if (status != MSG_OK)
 		return false;
-
-	b = b_array[0];
 
 	/* write the corresponding bit in temp variable */
 	b = (data != 0) ? (b | (1 << bitNum)) : (b & ~(1 << bitNum));
@@ -178,8 +171,6 @@ bool	I2Cport_writeBits (I2CDriver *i2cp,
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
-	/* Workaround, use two bytes instead of one for STM32F1 */
-	uint8_t b_array[2];
 	uint8_t b;
 	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
 
@@ -187,13 +178,11 @@ bool	I2Cport_writeBits (I2CDriver *i2cp,
 	i2cAcquireBus(i2cp);
 	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
-					  b_array, 2, tmo);
+					  &b, 1, tmo);
 
 	osalDbgCheck(MSG_OK == status);
 	if (status != MSG_OK)
 		return false;
-
-	b = b_array[0];
 
 	uint8_t mask = ((1 << length) - 1) << (bitStart - length + 1);
 	data <<= (bitStart - length + 1); // shift data into correct position
