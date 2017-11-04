@@ -52,7 +52,6 @@ int8_t I2Cport_readBits(I2CDriver *i2cp,
 	return (MSG_OK == status) ? length : -1;
 }
 
-/* Please be aware that you cannot read data with length 1 */
 int8_t	I2Cport_readBytes (I2CDriver *i2cp,
 			   uint8_t devAddr,
 			   uint8_t regAddr,
@@ -80,8 +79,6 @@ int8_t	I2Cport_readByte (I2CDriver *i2cp,
 			  uint8_t regAddr,
 			  uint8_t *data)
 {
-	uint8_t tmp[2];
-
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
@@ -91,10 +88,8 @@ int8_t	I2Cport_readByte (I2CDriver *i2cp,
 	i2cAcquireBus(i2cp);
 	status = i2cMasterTransmitTimeout(i2cp, devAddr,
 					  tx_data, 1,
-					  tmp, 2, tmo);
+					  data, 1, tmo);
 	i2cReleaseBus(i2cp);
-
-	*data = tmp[0];
 
 	osalDbgCheck(MSG_OK == status);
 	return (MSG_OK == status) ? 1 : -1;
@@ -127,6 +122,19 @@ bool	I2Cport_writeBit (I2CDriver *i2cp,
 					  tx_data, 1,
 					  &b, 1, tmo);
 
+	i2cflags_t flags = 0;
+	switch(status) {
+	case MSG_OK:
+		break;
+	case MSG_RESET:
+		flags = i2cGetErrors(i2cp);
+		osalDbgCheck(MSG_OK == status);
+		break;
+	case MSG_TIMEOUT:
+		flags = i2cGetErrors(i2cp);
+		osalDbgCheck(MSG_OK == status);
+		break;
+	}
 	osalDbgCheck(MSG_OK == status);
 	if (status != MSG_OK)
 		return false;
@@ -214,6 +222,7 @@ bool I2Cport_writeByte(I2CDriver *i2cp,
 		       uint8_t data) {
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
+	//systime_t tmo = TIME_INFINITE;
 
 	i2cAcquireBus(i2cp);
 
@@ -225,7 +234,19 @@ bool I2Cport_writeByte(I2CDriver *i2cp,
 					  tx_data, 2,
 					  NULL, 0, tmo);
 	i2cReleaseBus(i2cp);
-	osalDbgCheck(MSG_OK == status);
+	i2cflags_t flags = 0;
+	switch(status) {
+	case MSG_OK:
+		break;
+	case MSG_RESET:
+		flags = i2cGetErrors(i2cp);
+		osalDbgCheck(MSG_OK == status);
+		break;
+	case MSG_TIMEOUT:
+		flags = i2cGetErrors(i2cp);
+		osalDbgCheck(MSG_OK == status);
+		break;
+	}
 
 	return (MSG_OK == status) ? true : false;
 }

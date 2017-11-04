@@ -55,12 +55,12 @@ uint8_t MPU6050_buffer[14];
  * the default internal clock source.
  */
 void MPU6050_initialize() {
-    MPU6050_setClockSource(MPU6050_CLOCK_PLL_XGYRO);
+    MPU6050_setClockSource(MPU6050_CLOCK_INTERNAL);
     // No filter, base bandwith is 8kHz
     MPU6050_setDLPFMode(MPU6050_DLPF_BW_256);
     // Set a sample rate of 800Hz = 8kHz / ( DIV + 1)
     // DIV = 9
-    MPU6050_setRate(9);
+    //MPU6050_setRate(9);
     MPU6050_setFullScaleGyroRange(MPU6050_GYRO_FS_250);
     MPU6050_setFullScaleAccelRange(MPU6050_ACCEL_FS_2);
     MPU6050_setSleepEnabled(false); // thanks to Jack Elston for pointing this one out!

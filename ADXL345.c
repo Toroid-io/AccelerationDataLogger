@@ -33,7 +33,7 @@ THE SOFTWARE.
 #include "ADXL345.h"
 
 #include "hal.h"
-#define I2CDx I2CD1
+#define I2CDx I2CD2
 
 uint8_t ADXL345_buffer[6];
 

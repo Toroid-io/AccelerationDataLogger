@@ -160,6 +160,11 @@
 #define LINE_SWDIO                  PAL_LINE(GPIOA, 13U)
 #define LINE_SWCLK                  PAL_LINE(GPIOA, 14U)
 
+#define I2C1_SDA_LINE	PAL_LINE(GPIOB, GPIOB_I2C1_SDA)
+#define I2C1_SCL_LINE	PAL_LINE(GPIOB, GPIOB_I2C1_SCL)
+#define I2C2_SDA_LINE	PAL_LINE(GPIOB, GPIOB_I2C2_SDA)
+#define I2C2_SCL_LINE	PAL_LINE(GPIOB, GPIOB_I2C2_SCL)
+
 /*
  * I/O ports initial setup, this configuration is established soon after reset
  * in the initialization code.
@@ -314,12 +319,12 @@
  * PB3  - INT1_ADXL                 (input pullup).
  * PB4  - INT2_ADXL                 (input pullup).
  * PB5  - INT_MPU                   (input pullup).
- * PB6  - I2C1_SCL                  (alternate 1).
- * PB7  - I2C1_SDA                  (alternate 1).
+ * PB6  - I2C1_SCL                  (output pullup - alternate 1).
+ * PB7  - I2C1_SDA                  (input floating - alternate 1).
  * PB8  - PIN8_NOT_USED             (input pullup).
  * PB9  - PIN9_NOT_USED             (input pullup).
- * PB10 - I2C2_SCL                  (alternate 1).
- * PB11 - I2C2_SDA                  (alternate 1).
+ * PB10 - I2C2_SCL                  (output pullup - alternate 1).
+ * PB11 - I2C2_SDA                  (input floating - alternate 1).
  * PB12 - PIN12_NOT_USED            (input pullup).
  * PB13 - PIN13_NOT_USED            (input pullup).
  * PB14 - LED_4                     (output opendrain pullup).
@@ -331,12 +336,12 @@
                                      PIN_MODE_INPUT(GPIOB_INT1_ADXL) |        \
                                      PIN_MODE_INPUT(GPIOB_INT2_ADXL) |           \
                                      PIN_MODE_INPUT(GPIOB_INT_MPU) |           \
-                                     PIN_MODE_ALTERNATE(GPIOB_I2C1_SCL) |           \
-                                     PIN_MODE_ALTERNATE(GPIOB_I2C1_SDA) |           \
+                                     PIN_MODE_OUTPUT(GPIOB_I2C1_SCL) |           \
+                                     PIN_MODE_INPUT(GPIOB_I2C1_SDA) |           \
                                      PIN_MODE_INPUT(GPIOB_PIN8_NOT_USED) |           \
                                      PIN_MODE_INPUT(GPIOB_PIN9_NOT_USED) |           \
-                                     PIN_MODE_ALTERNATE(GPIOB_I2C2_SCL) |          \
-                                     PIN_MODE_ALTERNATE(GPIOB_I2C2_SDA) |          \
+                                     PIN_MODE_OUTPUT(GPIOB_I2C2_SCL) |          \
+                                     PIN_MODE_INPUT(GPIOB_I2C2_SDA) |          \
                                      PIN_MODE_INPUT(GPIOB_PIN12_NOT_USED) |          \
                                      PIN_MODE_INPUT(GPIOB_PIN13_NOT_USED) |          \
                                      PIN_MODE_OUTPUT(GPIOB_LED_4) |          \
@@ -363,12 +368,12 @@
                                      PIN_OSPEED_HIGH(GPIOB_INT1_ADXL) |           \
                                      PIN_OSPEED_HIGH(GPIOB_INT2_ADXL) |          \
                                      PIN_OSPEED_HIGH(GPIOB_INT_MPU) |          \
-                                     PIN_OSPEED_LOW(GPIOB_I2C1_SCL) |          \
-                                     PIN_OSPEED_LOW(GPIOB_I2C1_SDA) |          \
+                                     PIN_OSPEED_HIGH(GPIOB_I2C1_SCL) |          \
+                                     PIN_OSPEED_HIGH(GPIOB_I2C1_SDA) |          \
                                      PIN_OSPEED_HIGH(GPIOB_PIN8_NOT_USED) |          \
                                      PIN_OSPEED_HIGH(GPIOB_PIN9_NOT_USED) |          \
-                                     PIN_OSPEED_LOW(GPIOB_I2C2_SCL) |         \
-                                     PIN_OSPEED_LOW(GPIOB_I2C2_SDA) |         \
+                                     PIN_OSPEED_HIGH(GPIOB_I2C2_SCL) |         \
+                                     PIN_OSPEED_HIGH(GPIOB_I2C2_SDA) |         \
                                      PIN_OSPEED_HIGH(GPIOB_PIN12_NOT_USED) |         \
                                      PIN_OSPEED_HIGH(GPIOB_PIN13_NOT_USED) |         \
                                      PIN_OSPEED_HIGH(GPIOB_LED_4) |         \
@@ -395,12 +400,12 @@
                                      PIN_ODR_HIGH(GPIOB_INT1_ADXL) |              \
                                      PIN_ODR_HIGH(GPIOB_INT2_ADXL) |             \
                                      PIN_ODR_HIGH(GPIOB_INT_MPU) |             \
-                                     PIN_ODR_LOW(GPIOB_I2C1_SCL) |             \
-                                     PIN_ODR_LOW(GPIOB_I2C1_SDA) |             \
+                                     PIN_ODR_HIGH(GPIOB_I2C1_SCL) |             \
+                                     PIN_ODR_HIGH(GPIOB_I2C1_SDA) |             \
                                      PIN_ODR_HIGH(GPIOB_PIN8_NOT_USED) |             \
                                      PIN_ODR_HIGH(GPIOB_PIN9_NOT_USED) |             \
-                                     PIN_ODR_LOW(GPIOB_I2C2_SCL) |            \
-                                     PIN_ODR_LOW(GPIOB_I2C2_SDA) |            \
+                                     PIN_ODR_HIGH(GPIOB_I2C2_SCL) |            \
+                                     PIN_ODR_HIGH(GPIOB_I2C2_SDA) |            \
                                      PIN_ODR_HIGH(GPIOB_PIN12_NOT_USED) |            \
                                      PIN_ODR_HIGH(GPIOB_PIN13_NOT_USED) |            \
                                      PIN_ODR_HIGH(GPIOB_LED_4) |            \
@@ -411,12 +416,12 @@
                                      PIN_AFIO_AF(GPIOB_INT1_ADXL, 0U) |           \
                                      PIN_AFIO_AF(GPIOB_INT2_ADXL, 0U) |          \
                                      PIN_AFIO_AF(GPIOB_INT_MPU, 0U) |          \
-                                     PIN_AFIO_AF(GPIOB_I2C1_SCL, 1U) |          \
-                                     PIN_AFIO_AF(GPIOB_I2C1_SDA, 1U))
+                                     PIN_AFIO_AF(GPIOB_I2C1_SCL, 0U) |          \
+                                     PIN_AFIO_AF(GPIOB_I2C1_SDA, 0U))
 #define VAL_GPIOB_AFRH              (PIN_AFIO_AF(GPIOB_PIN8_NOT_USED, 0U) |          \
                                      PIN_AFIO_AF(GPIOB_PIN9_NOT_USED, 0U) |          \
-                                     PIN_AFIO_AF(GPIOB_I2C2_SCL, 1U) |         \
-                                     PIN_AFIO_AF(GPIOB_I2C2_SDA, 1U) |         \
+                                     PIN_AFIO_AF(GPIOB_I2C2_SCL, 0U) |         \
+                                     PIN_AFIO_AF(GPIOB_I2C2_SDA, 0U) |         \
                                      PIN_AFIO_AF(GPIOB_PIN12_NOT_USED, 0U) |         \
                                      PIN_AFIO_AF(GPIOB_PIN13_NOT_USED, 0U) |         \
                                      PIN_AFIO_AF(GPIOB_LED_4, 0U) |         \
