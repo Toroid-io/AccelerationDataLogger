@@ -316,9 +316,9 @@
  * PB0  - SPI_HOLD                  (output pushpull high).
  * PB1  - VUSB_ADC                  (?).
  * PB2  - PIN2_NOT_USED             (input pullup).
- * PB3  - INT1_ADXL                 (input pullup).
- * PB4  - INT2_ADXL                 (input pullup).
- * PB5  - INT_MPU                   (input pullup).
+ * PB3  - INT1_ADXL                 (input pulldown).
+ * PB4  - INT2_ADXL                 (input pulldown).
+ * PB5  - INT_MPU                   (input pulldown).
  * PB6  - I2C1_SCL                  (output pullup - alternate 1).
  * PB7  - I2C1_SDA                  (input floating - alternate 1).
  * PB8  - PIN8_NOT_USED             (input pullup).
@@ -383,9 +383,9 @@
                                      PIN_PUPDR_PULLUP(GPIOB_PIN2_NOT_USED) |         \
                                      PIN_PUPDR_PULLUP(GPIOB_INT1_ADXL) |          \
                                      PIN_PUPDR_PULLUP(GPIOB_INT2_ADXL) |         \
-                                     PIN_PUPDR_PULLUP(GPIOB_INT_MPU) |         \
-                                     PIN_PUPDR_PULLUP(GPIOB_I2C1_SCL) |         \
-                                     PIN_PUPDR_PULLUP(GPIOB_I2C1_SDA) |         \
+                                     PIN_PUPDR_PULLDOWN(GPIOB_INT_MPU) |         \
+                                     PIN_PUPDR_PULLDOWN(GPIOB_I2C1_SCL) |        \
+                                     PIN_PUPDR_PULLDOWN(GPIOB_I2C1_SDA) |        \
                                      PIN_PUPDR_PULLUP(GPIOB_PIN8_NOT_USED) |         \
                                      PIN_PUPDR_PULLUP(GPIOB_PIN9_NOT_USED) |         \
                                      PIN_PUPDR_PULLUP(GPIOB_I2C2_SCL) |        \

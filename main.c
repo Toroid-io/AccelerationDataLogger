@@ -152,11 +152,12 @@ static THD_FUNCTION(Thread1, arg) {
     chThdSleepMilliseconds(1000);
   }
   chprintf((BaseSequentialStream *)&SD1,"MPU OK\r\n");
+  chThdSleepMilliseconds(100);
 
   /* Calibration loop */
   int32_t calibrationAccumulator[3] = {0, 0, 0};
   for (i = 0; i < 128; ++i) {
-    chThdSleepMilliseconds(10);
+    chThdSleepMilliseconds(2);
     MPU6050_getAcceleration(&ax, &ay, &az);
     calibrationAccumulator[0] += ax;
     calibrationAccumulator[1] += ay;
@@ -185,7 +186,6 @@ static THD_FUNCTION(Thread1, arg) {
     palSetPad(GPIOB, GPIOB_LED_3);
     //chprintf((BaseSequentialStream *)&SD1,"L\r\n");
     MPU6050_getAcceleration(&ax, &ay, &az);
-    //I2Cport_readByte(&I2CD1, 0x68, MPU6050_RA_PWR_MGMT_1, &tmp);
     /*
     ax -= cax;
     ay -= cay;

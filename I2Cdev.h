@@ -12,7 +12,8 @@
  * drivers
  */
 
-int8_t 	I2Cport_readBit (uint8_t devAddr,
+int8_t 	I2Cport_readBit (I2CDriver *i2cp,
+			 uint8_t devAddr,
 			 uint8_t regAddr,
 			 uint8_t bitNum,
 			 uint8_t *data);

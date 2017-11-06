@@ -2,11 +2,49 @@
 #include "hal.h"
 #include "I2Cdev.h"
 
-/* autoincrement bit position. This bit needs to perform reading of
- * multiple bytes at one request */
-#define AUTO_INCREMENT_BIT (0<<7)
+int8_t 	I2Cport_readBit (I2CDriver *i2cp,
+			 uint8_t devAddr,
+			 uint8_t regAddr,
+			 uint8_t bitNum,
+			 uint8_t *data)
+{
+	msg_t status = MSG_OK;
+	systime_t tmo = MS2ST(4);
 
-static uint8_t tx_data[8];
+	uint8_t b;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
+
+	/* get register value */
+	i2cAcquireBus(i2cp);
+	status = i2cMasterTransmitTimeout(i2cp, devAddr,
+					  tx_data, 1,
+					  &b, 1, tmo);
+
+	i2cflags_t flags = 0;
+	switch(status) {
+	case MSG_OK:
+		break;
+	case MSG_RESET:
+		flags = i2cGetErrors(i2cp);
+		osalDbgCheck(MSG_OK == status);
+		break;
+	case MSG_TIMEOUT:
+		flags = i2cGetErrors(i2cp);
+		osalDbgCheck(MSG_OK == status);
+		break;
+	}
+	osalDbgCheck(MSG_OK == status);
+	if (status != MSG_OK)
+		return false;
+
+	*data = (b >> bitNum) & 0x01;
+
+	i2cReleaseBus(i2cp);
+	osalDbgCheck(MSG_OK == status);
+
+	return (MSG_OK == status) ? true : false;
+}
 
 /** Read multiple bits from an 8-bit device register.
  * @param devAddr I2C slave device address
@@ -28,8 +66,8 @@ int8_t I2Cport_readBits(I2CDriver *i2cp,
 	systime_t tmo = MS2ST(4);
 
 	uint8_t b;
-
-	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
 
 	/* receiving */
 	i2cAcquireBus(i2cp);
@@ -61,7 +99,8 @@ int8_t	I2Cport_readBytes (I2CDriver *i2cp,
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
-	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
 
 	/* receiving */
 	i2cAcquireBus(i2cp);
@@ -82,7 +121,8 @@ int8_t	I2Cport_readByte (I2CDriver *i2cp,
 	msg_t status = MSG_OK;
 	systime_t tmo = MS2ST(4);
 
-	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
 
 	/* receiving */
 	i2cAcquireBus(i2cp);
@@ -114,7 +154,8 @@ bool	I2Cport_writeBit (I2CDriver *i2cp,
 	systime_t tmo = MS2ST(4);
 
 	uint8_t b;
-	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
 
 	/* get register value */
 	i2cAcquireBus(i2cp);
@@ -141,7 +182,7 @@ bool	I2Cport_writeBit (I2CDriver *i2cp,
 
 	/* write the corresponding bit in temp variable */
 	b = (data != 0) ? (b | (1 << bitNum)) : (b & ~(1 << bitNum));
-	tx_data[0] = regAddr| AUTO_INCREMENT_BIT;
+	tx_data[0] = regAddr;
 	tx_data[1] = b;
 
 	/* send the new register value */
@@ -180,7 +221,8 @@ bool	I2Cport_writeBits (I2CDriver *i2cp,
 	systime_t tmo = MS2ST(4);
 
 	uint8_t b;
-	tx_data[0] = regAddr | AUTO_INCREMENT_BIT;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
 
 	/* get register value */
 	i2cAcquireBus(i2cp);
@@ -198,7 +240,7 @@ bool	I2Cport_writeBits (I2CDriver *i2cp,
 	b &= ~(mask); // zero all important bits in existing byte
 	b |= data; // combine data with existing byte
 
-	tx_data[0] = regAddr| AUTO_INCREMENT_BIT;
+	tx_data[0] = regAddr;
 	tx_data[1] = b;
 
 	status = i2cMasterTransmitTimeout(i2cp, devAddr,
@@ -225,8 +267,8 @@ bool I2Cport_writeByte(I2CDriver *i2cp,
 	//systime_t tmo = TIME_INFINITE;
 
 	i2cAcquireBus(i2cp);
-
-	tx_data[0] = regAddr| AUTO_INCREMENT_BIT;
+	uint8_t tx_data[8];
+	tx_data[0] = regAddr;
 	tx_data[1] = data;
 
 	/* send the new register value */
