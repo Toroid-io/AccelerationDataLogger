@@ -48,17 +48,6 @@ static const I2CConfig softI2C2 = {
 	4000
 };
 #else
-/*
-static const I2CConfig i2ccfg = {
-	STM32_TIMINGR_PRESC(2) |
-	STM32_TIMINGR_SCLDEL(14) |
-	STM32_TIMINGR_SDADEL(0) |
-	STM32_TIMINGR_SCLH(62)  |
-	STM32_TIMINGR_SCLL(82),
-	0,
-	0
-};
-*/
 
 static const I2CConfig i2ccfg1 = {
 	0x20803C54,
@@ -82,6 +71,7 @@ static const SPIConfig eepromSPI = {
 	SPI_CR1_BR_2 | SPI_CR1_BR_1,
 	0
 };
+#endif
 
 static const SPIConfig ramSPI = {
 	NULL,
@@ -90,18 +80,15 @@ static const SPIConfig ramSPI = {
 	SPI_CR1_BR_2 | SPI_CR1_BR_1,
 	SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0
 };
-#endif
 
 /*
  * SPI RX buffer
  */
 
-/*
 static union Rxbuf {
 	uint8_t c[32];
 	int16_t i[16];
 } rxbuf;
-*/
 
 /*
  * Timer config
@@ -127,7 +114,7 @@ static THD_WORKING_AREA(waThread1, 0x800);
 static THD_FUNCTION(Thread1, arg) {
 
   (void)arg;
-  //void *pbuf;
+  void *pbuf;
 
   chRegSetThreadName("MPU6050_Poll");
 
@@ -173,8 +160,6 @@ static THD_FUNCTION(Thread1, arg) {
   chprintf((BaseSequentialStream *)&SD1,"MPU Calibrated\r\n");
   chSemSignal(&i2c_sync);
 
-  uint8_t tmp;
-
   while (true) {
     /* wait until the timer starts */
     palClearPad(GPIOB, GPIOB_LED_3);
@@ -184,17 +169,12 @@ static THD_FUNCTION(Thread1, arg) {
     chSysUnlock();
 
     palSetPad(GPIOB, GPIOB_LED_3);
-    //chprintf((BaseSequentialStream *)&SD1,"L\r\n");
     MPU6050_getAcceleration(&ax, &ay, &az);
-    /*
+
     ax -= cax;
     ay -= cay;
     az -= caz;
-    */
-    //gx -= cgx;
-    //gy -= cgy;
-    //gz -= cgz;
-    /*
+
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
       message[0]  = 'M';
@@ -204,11 +184,16 @@ static THD_FUNCTION(Thread1, arg) {
       message[4]  = (char)((ay >> 8) & 0xFF);
       message[5]  = (char)((az) & 0xFF);
       message[6]  = (char)((az >> 8) & 0xFF);
-      //chsnprintf((char *)pbuf, BUFFERS_SIZE, "A:%u:%d\r\n", counter++, ax);
       (void)chMBPost(&filled_buffers, (msg_t)pbuf, TIME_INFINITE);
     }
-    */
   }
+}
+
+void modifyAxis(int16_t *ax, int16_t *ay, int16_t *az)
+{
+	*az= -*az;
+	*ax = *ax;
+	*ay = -*ay;
 }
 
 /*
@@ -218,7 +203,7 @@ static THD_WORKING_AREA(waThread2, 0x800);
 static THD_FUNCTION(Thread2, arg) {
 
   (void)arg;
-  //void *pbuf;
+  void *pbuf;
 
   chRegSetThreadName("ADXL345_Poll");
 
@@ -240,6 +225,8 @@ static THD_FUNCTION(Thread2, arg) {
   for (i = 0; i < 128; ++i) {
     chThdSleepMilliseconds(2);
     ADXL345_getAcceleration(&ax, &ay, &az);
+    modifyAxis(&ax, &ay, &az);
+
     calibrationAccumulator[0] += ax;
     calibrationAccumulator[1] += ay;
     calibrationAccumulator[2] += az;
@@ -263,7 +250,8 @@ static THD_FUNCTION(Thread2, arg) {
 
     palSetPad(GPIOB, GPIOB_LED_4);
     ADXL345_getAcceleration(&ax, &ay, &az);
-    /*
+    modifyAxis(&ax, &ay, &az);
+
     ax -= cax;
     ay -= cay;
     az -= caz;
@@ -279,7 +267,6 @@ static THD_FUNCTION(Thread2, arg) {
       message[6]  = (char)((az >> 8) & 0xFF);
       (void)chMBPost(&filled_buffers, (msg_t)pbuf, TIME_INFINITE);
     }
-    */
   }
 }
 
@@ -311,7 +298,6 @@ static THD_FUNCTION(Thread4, arg) {
 }
 
 
-#if 0
 /*
  * SPI bus thread
  */
@@ -367,17 +353,14 @@ static THD_FUNCTION(Thread5, arg) {
   /* After finishing acquitision, go here
    * I2C threads will hang after a while because they will run out of mailboxes
    */
-  palSetPad(GPIOC, GPIOC_LED_2);
-  //chThdSleepMilliseconds(5000);
   chBSemSignal(&writeSerial);
-  while (true) {
-	  palSetPad(GPIOC, GPIOC_LED_2);
-	  chThdSleepMilliseconds(500);
-	  palClearPad(GPIOC, GPIOC_LED_2);
-	  chThdSleepMilliseconds(500);
-  }
 }
 
+/*
+ * Write to serial thread.
+ * This is activated after the last reading.
+ * Fetches the content from the SPI RAM and prints to the serial console
+ */
 static THD_WORKING_AREA(waThread6, 256);
 static THD_FUNCTION(Thread6, arg) {
   (void)arg;
@@ -390,7 +373,7 @@ static THD_FUNCTION(Thread6, arg) {
   readCommandAddress[1] = 0;
   readCommandAddress[2] = 0;
   readCommandAddress[3] = 0;
-  readCommandAddress[3] = 0; // Just in case
+  readCommandAddress[4] = 0; // needed for the exchange
 
   /* We will block the SPI device while printing */
   spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
@@ -399,33 +382,26 @@ static THD_FUNCTION(Thread6, arg) {
   spiExchange(&SPID1, 5, readCommandAddress, rxbuf.c);
   char id = rxbuf.c[4];
   while (true) {
-      if (id == 'A') {
-        spiReceive(&SPID1, 6, rxbuf.c);          /* Atomic transfer operations.      */
-        chMtxLock(&memoryCounter_mutex);
-	memoryCounter -= 7;
-	chMtxUnlock(&memoryCounter_mutex);
-	chprintf((BaseSequentialStream *)&SD1,"%ld:A:%d:%d:%d;\r\n",
-		 memoryCounter,
-		 rxbuf.i[0],
-		 rxbuf.i[1],
-		 rxbuf.i[2]);
-      }
-      else if (id == 'M') {
-        spiReceive(&SPID1, 12, rxbuf.c);          /* Atomic transfer operations.      */
-        chMtxLock(&memoryCounter_mutex);
-	memoryCounter -= 13;
-	chMtxUnlock(&memoryCounter_mutex);
-	chprintf((BaseSequentialStream *)&SD1,"%ld:M:%d:%d:%d:%d:%d:%d;\r\n",
-		 memoryCounter,
-		 rxbuf.i[0],
-		 rxbuf.i[1],
-		 rxbuf.i[2],
-		 rxbuf.i[3],
-		 rxbuf.i[4],
-		 rxbuf.i[5]);
-      } else {
-	chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown device in memory\r\n");
-      }
+	  spiReceive(&SPID1, 6, rxbuf.c);          /* Atomic transfer operations.      */
+	  chMtxLock(&memoryCounter_mutex);
+	  memoryCounter -= 7;
+	  chMtxUnlock(&memoryCounter_mutex);
+	  if (id == 'A') {
+		  chprintf((BaseSequentialStream *)&SD1,"%ld:A:%d:%d:%d;\r\n",
+			   memoryCounter,
+			   rxbuf.i[0],
+			   rxbuf.i[1],
+			   rxbuf.i[2]);
+	  }
+	  else if (id == 'M') {
+		  chprintf((BaseSequentialStream *)&SD1,"%ld:M:%d:%d:%d;\r\n",
+			   memoryCounter,
+			   rxbuf.i[0],
+			   rxbuf.i[1],
+			   rxbuf.i[2]);
+	  } else {
+		  chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown device in memory\r\n");
+	  }
       if (memoryCounter <= 0)
 	      break;
       spiReceive(&SPID1, 1, &id);          /* Atomic transfer operations.      */
@@ -441,13 +417,6 @@ static THD_FUNCTION(Thread6, arg) {
     chThdSleepMilliseconds(500);
   }
 }
-
-/*
- * Write to serial thread.
- * This is activated after the last reading.
- * Fetches the content from the SPI RAM and prints to the serial console
- */
-#endif
 
 /*
  * Application entry point.
@@ -564,8 +533,8 @@ int main(void) {
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL); // MPU
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
   chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO+2, Thread4, NULL); // Synchronization Thread
-  //chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
-  //chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
+  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
+  chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
 
   /*
    * Normal main() thread activity
