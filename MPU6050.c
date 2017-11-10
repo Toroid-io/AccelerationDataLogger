@@ -2783,6 +2783,7 @@ void MPU6050_setDeviceID(uint8_t id) {
     I2Cport_writeBits(&MPU_I2CDx, MPU6050_devAddr, MPU6050_RA_WHO_AM_I, MPU6050_WHO_AM_I_BIT, MPU6050_WHO_AM_I_LENGTH, id);
 }
 
+#if 0
 // ======== UNDOCUMENTED/DMP REGISTERS/METHODS ========
 
 // XG_OFFS_TC register
@@ -3213,3 +3214,4 @@ uint8_t MPU6050_getDMPConfig2() {
 void MPU6050_setDMPConfig2(uint8_t config) {
     I2Cport_writeByte(&MPU_I2CDx, MPU6050_devAddr, MPU6050_RA_DMP_CFG_2, config);
 }
+#endif

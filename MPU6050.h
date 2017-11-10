@@ -704,6 +704,7 @@ void MPU6050_getFIFOBytes(uint8_t *data, uint8_t length);
 uint8_t MPU6050_getDeviceID(void);
 void MPU6050_setDeviceID(uint8_t id);
 
+#if 0
 // ======== UNDOCUMENTED/DMP REGISTERS/METHODS ========
 
 // XG_OFFS_TC register
@@ -1004,6 +1005,7 @@ uint32_t MPU6050_dmpGetGyroSumOfSquare(void);
 uint32_t MPU6050_dmpGetAccelSumOfSquare(void);
 void MPU6050_dmpOverrideQuaternion(long *q);
 uint16_t MPU6050_dmpGetFIFOPacketSize(void);
+#endif
 #endif
 
 #endif /* _MPU6050_H_ */

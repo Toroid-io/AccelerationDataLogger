@@ -219,4 +219,5 @@ ULIBS =
 ##############################################################################
 
 RULESPATH = $(CHIBIOS)/os/common/startup/ARMCMx/compilers/GCC
+BUILDDIR = /tmp/ChibiOS
 include $(RULESPATH)/rules.mk
