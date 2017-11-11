@@ -22,6 +22,14 @@ enum state {IDLE,
 	PRINT} SystemState;
 static MUTEX_DECL(SystemState_mutex);
 
+struct configStructure {
+	uint16_t magicNumber;
+	uint16_t samplingSpeed;
+	int16_t calibrationMPU[3];
+	int16_t calibrationADXL[3];
+	bool gyroActivated;
+} systemConfig;
+
 /* the mailboxes are used to send information into the spi thread */
 #define NUM_BUFFERS 4
 #define BUFFERS_SIZE 8
@@ -54,89 +62,6 @@ static union Rxbuf {
 	uint8_t c[32];
 	int16_t i[16];
 } rxbuf;
-
-
-/*===========================================================================*/
-/* Functions                                                                 */
-/*===========================================================================*/
-void modifyAxis(int16_t *ax, int16_t *ay, int16_t *az)
-{
-	*az= -*az;
-	*ax = *ax;
-	*ay = -*ay;
-}
-
-static void led2off(void *arg) {
-  (void)arg;
-  palSetPad(GPIOC, GPIOC_LED_2);
-}
-
-static void blinkAllLeds(void){
-  for (int i = 0; i < 2; ++i) {
-    palClearPad(GPIOC, GPIOC_LED_1);
-    palClearPad(GPIOC, GPIOC_LED_2);
-    palClearPad(GPIOB, GPIOB_LED_3);
-    palClearPad(GPIOB, GPIOB_LED_4);
-    osalThreadSleepMilliseconds(100);
-    palSetPad(GPIOC, GPIOC_LED_1);
-    palSetPad(GPIOC, GPIOC_LED_2);
-    palSetPad(GPIOB, GPIOB_LED_3);
-    palSetPad(GPIOB, GPIOB_LED_4);
-    osalThreadSleepMilliseconds(100);
-  }
-}
-
-static void calibrateSensors(void)
-{
-  uint16_t i;
-  int16_t ax, ay, az;
-  int32_t calibrationAccADXL[3] = {0, 0, 0};
-  int32_t calibrationAccMPU[3] = {0, 0, 0};
-
-  /* Calibration loop */
-  for (i = 0; i < 128; ++i) {
-    palClearPad(GPIOC, GPIOC_LED_2);
-    chThdSleepMilliseconds(10);
-    palSetPad(GPIOC, GPIOC_LED_2);
-    MPU6050_getAcceleration(&ax, &ay, &az);
-    calibrationAccMPU[0] += ax;
-    calibrationAccMPU[1] += ay;
-    calibrationAccMPU[2] += az;
-    ADXL345_getAcceleration(&ax, &ay, &az);
-    modifyAxis(&ax, &ay, &az);
-    calibrationAccADXL[0] += ax;
-    calibrationAccADXL[1] += ay;
-    calibrationAccADXL[2] += az;
-    chThdSleepMilliseconds(10);
-  }
-
-  calibrationMPU[0] = calibrationAccMPU[0] / 128;
-  calibrationMPU[1] = calibrationAccMPU[1] / 128;
-  calibrationMPU[2] = calibrationAccMPU[2] / 128;
-
-  calibrationADXL[0] = calibrationAccADXL[0] / 128;
-  calibrationADXL[1] = calibrationAccADXL[1] / 128;
-  calibrationADXL[2] = calibrationAccADXL[2] / 128;
-
-  /* We finished the calibration here*/
-  //chprintf((BaseSequentialStream *)&SD1,"Calibration finished\r\n");
-}
-
-static void resetAllMailboxes(void)
-{
-	uint8_t usedMailboxes = 0;
-	void *pbuf;
-
-	chMBReset(&free_buffers);
-	chMBReset(&filled_buffers);
-
-	chMBObjectInit(&filled_buffers, filled_buffers_queue, NUM_BUFFERS);
-	chMBObjectInit(&free_buffers, free_buffers_queue, NUM_BUFFERS);
-	uint8_t i;
-	for (i = 0; i < NUM_BUFFERS; i++)
-		(void)chMBPost(&free_buffers, (msg_t)&buffers[i], TIME_INFINITE);
-
-}
 
 /*===========================================================================*/
 /* Callbacks                                                                 */
@@ -260,6 +185,164 @@ static const GPTConfig gpt3cfg = {
   gpt3cb,
   0, 0
 };
+
+/*===========================================================================*/
+/* Functions                                                                 */
+/*===========================================================================*/
+void modifyAxis(int16_t *ax, int16_t *ay, int16_t *az)
+{
+	*az= -*az;
+	*ax = *ax;
+	*ay = -*ay;
+}
+
+static void led2off(void *arg) {
+  (void)arg;
+  palSetPad(GPIOC, GPIOC_LED_2);
+}
+
+static void blinkAllLeds(void){
+  for (int i = 0; i < 2; ++i) {
+    palClearPad(GPIOC, GPIOC_LED_1);
+    palClearPad(GPIOC, GPIOC_LED_2);
+    palClearPad(GPIOB, GPIOB_LED_3);
+    palClearPad(GPIOB, GPIOB_LED_4);
+    osalThreadSleepMilliseconds(100);
+    palSetPad(GPIOC, GPIOC_LED_1);
+    palSetPad(GPIOC, GPIOC_LED_2);
+    palSetPad(GPIOB, GPIOB_LED_3);
+    palSetPad(GPIOB, GPIOB_LED_4);
+    osalThreadSleepMilliseconds(100);
+  }
+}
+
+static void I2CInit(void)
+{
+	/*
+	 * Check if the I2C is clogged
+	 */
+
+	if (!palReadPad(GPIOB, GPIOB_I2C1_SDA)) {
+		for (int i  = 0; i < 16; ++i) {
+			palClearPad(GPIOB, GPIOB_I2C1_SCL);
+			osalThreadSleepMilliseconds(1);
+			palSetPad(GPIOB, GPIOB_I2C1_SCL);
+			osalThreadSleepMilliseconds(1);
+		}
+	}
+	if (!palReadPad(GPIOB, GPIOB_I2C2_SDA)) {
+		for (int i  = 0; i < 16; ++i) {
+			palClearPad(GPIOB, GPIOB_I2C2_SCL);
+			osalThreadSleepMilliseconds(1);
+			palSetPad(GPIOB, GPIOB_I2C2_SCL);
+			osalThreadSleepMilliseconds(1);
+		}
+	}
+
+#if USE_BITBANG_I2C
+	i2cStart(&I2CD1, &softI2C1);
+	i2cStart(&I2CD2, &softI2C2);
+#else
+	/*
+	 * Activates the I2C driver in hardware mode
+	 */
+	palSetPadMode(GPIOB, GPIOB_I2C1_SCL, PAL_MODE_ALTERNATE(1) |
+		      PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
+	palSetPadMode(GPIOB, GPIOB_I2C1_SDA, PAL_MODE_ALTERNATE(1) |
+		      PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
+	palSetPadMode(GPIOB, GPIOB_I2C2_SCL, PAL_MODE_ALTERNATE(1) |
+		      PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
+	palSetPadMode(GPIOB, GPIOB_I2C2_SDA, PAL_MODE_ALTERNATE(1) |
+		      PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
+	i2cStart(&I2CD1, &i2ccfg1);
+	i2cStart(&I2CD2, &i2ccfg2);
+#endif
+}
+
+static void calibrateSensors(void)
+{
+  uint16_t i;
+  int16_t ax, ay, az;
+  int32_t calibrationAccADXL[3] = {0, 0, 0};
+  int32_t calibrationAccMPU[3] = {0, 0, 0};
+
+  /* Calibration loop */
+  for (i = 0; i < 128; ++i) {
+    palClearPad(GPIOC, GPIOC_LED_2);
+    chThdSleepMilliseconds(10);
+    palSetPad(GPIOC, GPIOC_LED_2);
+    MPU6050_getAcceleration(&ax, &ay, &az);
+    calibrationAccMPU[0] += ax;
+    calibrationAccMPU[1] += ay;
+    calibrationAccMPU[2] += az;
+    ADXL345_getAcceleration(&ax, &ay, &az);
+    modifyAxis(&ax, &ay, &az);
+    calibrationAccADXL[0] += ax;
+    calibrationAccADXL[1] += ay;
+    calibrationAccADXL[2] += az;
+    chThdSleepMilliseconds(10);
+  }
+
+  calibrationMPU[0] = calibrationAccMPU[0] / 128;
+  calibrationMPU[1] = calibrationAccMPU[1] / 128;
+  calibrationMPU[2] = calibrationAccMPU[2] / 128;
+
+  calibrationADXL[0] = calibrationAccADXL[0] / 128;
+  calibrationADXL[1] = calibrationAccADXL[1] / 128;
+  calibrationADXL[2] = calibrationAccADXL[2] / 128;
+
+  /* We finished the calibration here*/
+  //chprintf((BaseSequentialStream *)&SD1,"Calibration finished\r\n");
+}
+
+void createMailboxes(void)
+{
+	chMBObjectInit(&filled_buffers, filled_buffers_queue, NUM_BUFFERS);
+	chMBObjectInit(&free_buffers, free_buffers_queue, NUM_BUFFERS);
+	for (uint8_t i = 0; i < NUM_BUFFERS; i++)
+		(void)chMBPost(&free_buffers, (msg_t)&buffers[i], TIME_INFINITE);
+}
+
+static void resetAllMailboxes(void)
+{
+	chMBReset(&free_buffers);
+	chMBReset(&filled_buffers);
+
+	createMailboxes();
+}
+
+static void sensorStartup(void)
+{
+	/* Initialize MPU */
+	MPU6050_reset();
+	chThdSleepMilliseconds(100);
+	MPU6050_resetGyroscopePath();
+	MPU6050_resetAccelerometerPath();
+	MPU6050_resetTemperaturePath();
+	chThdSleepMilliseconds(100);
+	MPU6050_initialize();
+	MPU6050_setStandbyXGyroEnabled(true);
+	MPU6050_setStandbyYGyroEnabled(true);
+	MPU6050_setStandbyZGyroEnabled(true);
+	chThdSleepMilliseconds(100);
+	// verify connection
+	while (!MPU6050_testConnection()) {
+		chprintf((BaseSequentialStream *)&SD1,"MPU FAIL\r\n");
+		chThdSleepMilliseconds(1000);
+	}
+	chprintf((BaseSequentialStream *)&SD1,"MPU OK\r\n");
+
+	/* Initialize ADXL345 */
+	ADXL345_initialize();
+	chThdSleepMilliseconds(100);
+	// verify connection
+	while (!ADXL345_testConnection()) {
+		chprintf((BaseSequentialStream *)&SD1,"ADXL FAIL\r\n");
+		chThdSleepMilliseconds(1000);
+	}
+	chprintf((BaseSequentialStream *)&SD1,"ADXL OK\r\n");
+}
+
 
 /*===========================================================================*/
 /* Threads                                                                   */
@@ -557,85 +640,17 @@ int main(void) {
    */
   blinkAllLeds();
 
-  /*
-   * Check if the I2C is clogged
-   */
+  I2CInit();
 
-  if (!palReadPad(GPIOB, GPIOB_I2C1_SDA)) {
-	  for (int i  = 0; i < 16; ++i) {
-		  palClearPad(GPIOB, GPIOB_I2C1_SCL);
-		  osalThreadSleepMilliseconds(1);
-		  palSetPad(GPIOB, GPIOB_I2C1_SCL);
-		  osalThreadSleepMilliseconds(1);
-	  }
-  }
-  if (!palReadPad(GPIOB, GPIOB_I2C2_SDA)) {
-	  for (int i  = 0; i < 16; ++i) {
-		  palClearPad(GPIOB, GPIOB_I2C2_SCL);
-		  osalThreadSleepMilliseconds(1);
-		  palSetPad(GPIOB, GPIOB_I2C2_SCL);
-		  osalThreadSleepMilliseconds(1);
-	  }
-  }
-
-#if USE_BITBANG_I2C
-  i2cStart(&I2CD1, &softI2C1);
-  i2cStart(&I2CD2, &softI2C2);
-#else
-  /*
-   * Activates the I2C driver in hardware mode
-   */
-  palSetPadMode(GPIOB, GPIOB_I2C1_SCL, PAL_MODE_ALTERNATE(1) |
-		PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
-  palSetPadMode(GPIOB, GPIOB_I2C1_SDA, PAL_MODE_ALTERNATE(1) |
-		PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
-  palSetPadMode(GPIOB, GPIOB_I2C2_SCL, PAL_MODE_ALTERNATE(1) |
-		PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
-  palSetPadMode(GPIOB, GPIOB_I2C2_SDA, PAL_MODE_ALTERNATE(1) |
-		PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
-  i2cStart(&I2CD1, &i2ccfg1);
-  i2cStart(&I2CD2, &i2ccfg2);
-#endif
-
-  /* Initialize MPU */
-  MPU6050_reset();
-  chThdSleepMilliseconds(100);
-  MPU6050_resetGyroscopePath();
-  MPU6050_resetAccelerometerPath();
-  MPU6050_resetTemperaturePath();
-  chThdSleepMilliseconds(100);
-  MPU6050_initialize();
-  MPU6050_setStandbyXGyroEnabled(true);
-  MPU6050_setStandbyYGyroEnabled(true);
-  MPU6050_setStandbyZGyroEnabled(true);
-  chThdSleepMilliseconds(100);
-  // verify connection
-  while (!MPU6050_testConnection()) {
-    chprintf((BaseSequentialStream *)&SD1,"MPU FAIL\r\n");
-    chThdSleepMilliseconds(1000);
-  }
-  chprintf((BaseSequentialStream *)&SD1,"MPU OK\r\n");
-
-  /* Initialize ADXL345 */
-  ADXL345_initialize();
-  chThdSleepMilliseconds(100);
-  // verify connection
-  while (!ADXL345_testConnection()) {
-    chprintf((BaseSequentialStream *)&SD1,"ADXL FAIL\r\n");
-    chThdSleepMilliseconds(1000);
-  }
-  chprintf((BaseSequentialStream *)&SD1,"ADXL OK\r\n");
+  sensorStartup();
 
   /* Initialize the timer */
   gptStart(&GPTD3, &gpt3cfg);
 
   /* Create and pre-fill the mailboxes.*/
-  chMBObjectInit(&filled_buffers, filled_buffers_queue, NUM_BUFFERS);
-  chMBObjectInit(&free_buffers, free_buffers_queue, NUM_BUFFERS);
-  uint8_t i;
-  for (i = 0; i < NUM_BUFFERS; i++)
-    (void)chMBPost(&free_buffers, (msg_t)&buffers[i], TIME_INFINITE);
+  createMailboxes();
 
+  /* Init thread queue (unlock accelerometer threads from interruption) */
   osalThreadQueueObjectInit(&threadQueue);
 
   SystemState = IDLE;
@@ -652,12 +667,11 @@ int main(void) {
    * EEPROM needs a WREN before writing (and to leave up CS)!!!
    */
 
-  osalThreadSleepMilliseconds(1000);
   /*
    * Creates the threads
    */
   chThdCreateStatic(waThread0, sizeof(waThread0), NORMALPRIO+5, Thread0, NULL); // State machine thread
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+1, Thread1, NULL); // MPU
+  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+2, Thread1, NULL); // MPU goes always first
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
   chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
   chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
