@@ -76,17 +76,16 @@ static void extcb2(EXTDriver *extp, expchannel_t channel) {
   chSysUnlockFromISR();
 }
 
+static void led2off(void *arg);
 static void gpt3cb(GPTDriver *gptp) {
 	(void)gptp;
 	static virtual_timer_t vt;
-	//palClearPad(GPIOC, GPIOC_LED_2);
+	palClearPad(GPIOC, GPIOC_LED_2);
 	chSysLockFromISR();
 	chThdDequeueAllI(&threadQueue, 0);
-	//chThdResumeI(&mpu_thread, (msg_t)NULL);
-	//chThdResumeI(&adxl_thread, (msg_t)NULL);
-	/* LED2 set to OFF after 1mS.*/
-	//chVTResetI(&vt);
-	//chVTSetI(&vt, MS2ST(1), led2off, NULL);
+	/* LED2 set to OFF after 800uS.*/
+	chVTResetI(&vt);
+	chVTSetI(&vt, US2ST(800), led2off, NULL);
 	chSysUnlockFromISR();
 }
 
@@ -350,7 +349,14 @@ static THD_FUNCTION(Thread0, arg) {
 			break;
 		case CALIBRATION:
 			chprintf((BaseSequentialStream *)&SD1,"Calibration...\r\n");
-			chThdSleepMilliseconds(systemConfig.calibrationDelay);
+			if (systemConfig.calibrationDelay > 0)
+				for (uint8_t i = 0; i < 10*systemConfig.calibrationDelay; i++) {
+					palClearPad(GPIOC, GPIOC_LED_2);
+					chThdSleepMilliseconds(50);
+					palSetPad(GPIOC, GPIOC_LED_2);
+					chThdSleepMilliseconds(50);
+
+				}
 			calibrateSensors();
 			chprintf((BaseSequentialStream *)&SD1,"Calibration DONE\r\n");
 			chMtxLock(&systemState_mutex);
@@ -359,7 +365,14 @@ static THD_FUNCTION(Thread0, arg) {
 			break;
 		case START_ACQUISITION:
 			chprintf((BaseSequentialStream *)&SD1,"Acquisition...\r\n");
-			chThdSleepMilliseconds(systemConfig.acquisitionDelay);
+			if (systemConfig.acquisitionDelay > 0)
+				for (uint8_t i = 0; i < 10*systemConfig.acquisitionDelay; i++) {
+					palClearPad(GPIOC, GPIOC_LED_2);
+					chThdSleepMilliseconds(50);
+					palSetPad(GPIOC, GPIOC_LED_2);
+					chThdSleepMilliseconds(50);
+
+				}
 			chMtxLock(&memoryCounter_mutex);
 			memoryCounter = 0;
 			chMtxUnlock(&memoryCounter_mutex);
@@ -399,8 +412,6 @@ static THD_FUNCTION(Thread1, arg) {
 
   while (true) {
     /* wait until the timer starts */
-    palClearPad(GPIOB, GPIOB_LED_3);
-
     chSysLock();
     chThdEnqueueTimeoutS(&threadQueue, TIME_INFINITE);
     chSysUnlock();
@@ -444,7 +455,6 @@ static THD_FUNCTION(Thread2, arg) {
 
   while (true) {
     /* wait until the timer says */
-    palClearPad(GPIOB, GPIOB_LED_4);
     chSysLock();
     chThdEnqueueTimeoutS(&threadQueue, TIME_INFINITE);
     chSysUnlock();
