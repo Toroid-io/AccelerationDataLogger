@@ -1,5 +1,5 @@
 /* TODO
- * - Configu using SPI EEPROM
+ * - Config variable sensors range (EEPROM config)
  * - Use UART for data transfer
  * - Acquisition program
  * - Read battery values
@@ -9,6 +9,8 @@
 #include "ChibiOS/os/hal/lib/streams/chprintf.h"
 #include "MPU6050.h"
 #include "ADXL345.h"
+#include "staticConfig.h"
+
 
 /*===========================================================================*/
 /* Global variables - RTOS stuff                                             */
@@ -19,16 +21,10 @@ enum state {IDLE,
 	START_ACQUISITION,
 	ACQUISITION,
 	START_PRINT,
-	PRINT} SystemState;
-static MUTEX_DECL(SystemState_mutex);
+	PRINT} systemState;
+static MUTEX_DECL(systemState_mutex);
 
-struct configStructure {
-	uint16_t magicNumber;
-	uint16_t samplingSpeed;
-	int16_t calibrationMPU[3];
-	int16_t calibrationADXL[3];
-	bool gyroActivated;
-} systemConfig;
+struct configStructure systemConfig;
 
 /* the mailboxes are used to send information into the spi thread */
 #define NUM_BUFFERS 4
@@ -48,12 +44,6 @@ volatile int32_t memoryCounter;
 static BSEMAPHORE_DECL(writeSerial, 1);
 static threads_queue_t threadQueue;
 
-//static thread_reference_t mpu_thread = NULL;
-//static thread_reference_t adxl_thread = NULL;
-
-static int16_t calibrationADXL[3];
-static int16_t calibrationMPU[3];
-
 /*
  * SPI RX buffer
  */
@@ -72,8 +62,8 @@ static void extcb1(EXTDriver *extp, expchannel_t channel) {
   (void)extp;
   (void)channel;
   chSysLockFromISR();
-  if (SystemState == IDLE)
-	  SystemState = CALIBRATION;
+  if (systemState == IDLE)
+	  systemState = CALIBRATION;
   chSysUnlockFromISR();
 }
 
@@ -81,8 +71,8 @@ static void extcb2(EXTDriver *extp, expchannel_t channel) {
   (void)extp;
   (void)channel;
   chSysLockFromISR();
-  if (SystemState == IDLE)
-	  SystemState = START_ACQUISITION;
+  if (systemState == IDLE)
+	  systemState = START_ACQUISITION;
   chSysUnlockFromISR();
 }
 
@@ -134,15 +124,13 @@ static const I2CConfig i2ccfg2 = {
 
 #endif
 
-#if 0
 static const SPIConfig eepromSPI = {
 	NULL,
 	GPIOA,
 	GPIOA_SPI_CS_1,
 	SPI_CR1_BR_2 | SPI_CR1_BR_1,
-	0
+	SPI_CR2_DS_2 | SPI_CR2_DS_1 | SPI_CR2_DS_0
 };
-#endif
 
 static const SPIConfig ramSPI = {
 	NULL,
@@ -283,13 +271,15 @@ static void calibrateSensors(void)
     chThdSleepMilliseconds(10);
   }
 
-  calibrationMPU[0] = calibrationAccMPU[0] / 128;
-  calibrationMPU[1] = calibrationAccMPU[1] / 128;
-  calibrationMPU[2] = calibrationAccMPU[2] / 128;
+  systemConfig.calibrationMPU[0] = calibrationAccMPU[0] / 128;
+  systemConfig.calibrationMPU[1] = calibrationAccMPU[1] / 128;
+  systemConfig.calibrationMPU[2] = calibrationAccMPU[2] / 128;
 
-  calibrationADXL[0] = calibrationAccADXL[0] / 128;
-  calibrationADXL[1] = calibrationAccADXL[1] / 128;
-  calibrationADXL[2] = calibrationAccADXL[2] / 128;
+  systemConfig.calibrationADXL[0] = calibrationAccADXL[0] / 128;
+  systemConfig.calibrationADXL[1] = calibrationAccADXL[1] / 128;
+  systemConfig.calibrationADXL[2] = calibrationAccADXL[2] / 128;
+
+  saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
 
   /* We finished the calibration here*/
   //chprintf((BaseSequentialStream *)&SD1,"Calibration finished\r\n");
@@ -354,26 +344,28 @@ static THD_WORKING_AREA(waThread0, 0x800);
 static THD_FUNCTION(Thread0, arg) {
 	(void)arg;
 	while(true) {
-		switch(SystemState) {
+		switch(systemState) {
 		case IDLE:
 		default:
 			break;
 		case CALIBRATION:
 			chprintf((BaseSequentialStream *)&SD1,"Calibration...\r\n");
+			chThdSleepMilliseconds(systemConfig.calibrationDelay);
 			calibrateSensors();
 			chprintf((BaseSequentialStream *)&SD1,"Calibration DONE\r\n");
-			chMtxLock(&SystemState_mutex);
-			SystemState = IDLE;
-			chMtxUnlock(&SystemState_mutex);
+			chMtxLock(&systemState_mutex);
+			systemState = IDLE;
+			chMtxUnlock(&systemState_mutex);
 			break;
 		case START_ACQUISITION:
 			chprintf((BaseSequentialStream *)&SD1,"Acquisition...\r\n");
+			chThdSleepMilliseconds(systemConfig.acquisitionDelay);
 			chMtxLock(&memoryCounter_mutex);
 			memoryCounter = 0;
 			chMtxUnlock(&memoryCounter_mutex);
-			chMtxLock(&SystemState_mutex);
-			SystemState = ACQUISITION;
-			chMtxUnlock(&SystemState_mutex);
+			chMtxLock(&systemState_mutex);
+			systemState = ACQUISITION;
+			chMtxUnlock(&systemState_mutex);
 
 			/* Start the timer */
 			gptStartContinuous(&GPTD3, 124); // Timer interrupt at 800Hz
@@ -416,9 +408,9 @@ static THD_FUNCTION(Thread1, arg) {
     palSetPad(GPIOB, GPIOB_LED_3);
     MPU6050_getAcceleration(&ax, &ay, &az);
 
-    ax -= calibrationMPU[0];
-    ay -= calibrationMPU[1];
-    az -= calibrationMPU[2];
+    ax -= systemConfig.calibrationMPU[0];
+    ay -= systemConfig.calibrationMPU[1];
+    az -= systemConfig.calibrationMPU[2];
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
@@ -461,9 +453,9 @@ static THD_FUNCTION(Thread2, arg) {
     ADXL345_getAcceleration(&ax, &ay, &az);
     modifyAxis(&ax, &ay, &az);
 
-    ax -= calibrationADXL[0];
-    ay -= calibrationADXL[1];
-    az -= calibrationADXL[2];
+    ax -= systemConfig.calibrationADXL[0];
+    ay -= systemConfig.calibrationADXL[1];
+    az -= systemConfig.calibrationADXL[2];
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
@@ -510,9 +502,9 @@ static THD_FUNCTION(Thread5, arg) {
       if ((memoryCounter + 7) >= SPI_RAM_SIZE) {
 	      /* Do this as fast as possible */
 	      gptStopTimer(&GPTD3);
-	      chMtxLock(&SystemState_mutex);
-	      SystemState = IDLE;
-	      chMtxUnlock(&SystemState_mutex);
+	      chMtxLock(&systemState_mutex);
+	      systemState = IDLE;
+	      chMtxUnlock(&systemState_mutex);
 	      chprintf((BaseSequentialStream *)&SD1,"Acquisition DONE\r\n");
 	      resetAllMailboxes();
 	      continue;
@@ -569,9 +561,9 @@ static THD_FUNCTION(Thread6, arg) {
 		  chThdSleepMilliseconds(100);
 		  continue;
 	  }
-	  chMtxLock(&SystemState_mutex);
-	  SystemState = PRINT;
-	  chMtxUnlock(&SystemState_mutex);
+	  chMtxLock(&systemState_mutex);
+	  systemState = PRINT;
+	  chMtxUnlock(&systemState_mutex);
 	  print_memoryCounter = memoryCounter;
 	  /* We will block the SPI device while printing */
 	  spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
@@ -605,9 +597,9 @@ static THD_FUNCTION(Thread6, arg) {
 	  spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
 	  spiReleaseBus(&SPID1);              /* Ownership release.               */
 	  chprintf((BaseSequentialStream *)&SD1,"Printing finished");
-	  chMtxLock(&SystemState_mutex);
-	  SystemState = IDLE;
-	  chMtxUnlock(&SystemState_mutex);
+	  chMtxLock(&systemState_mutex);
+	  systemState = IDLE;
+	  chMtxUnlock(&systemState_mutex);
   }
 }
 
@@ -640,6 +632,29 @@ int main(void) {
    */
   blinkAllLeds();
 
+  /* Get and verify system config from EEPROM */
+  if (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
+	  chprintf((BaseSequentialStream *)&SD1,"Invalid config in EEPROM\r\n");
+	  /* Some safe defaults */
+	  systemConfig.samplingSpeed = 800;
+	  systemConfig.accelerometerRange = 2;
+	  systemConfig.calibrationMPU[0] = 0;
+	  systemConfig.calibrationMPU[1] = 0;
+	  systemConfig.calibrationMPU[2] = 0;
+	  systemConfig.calibrationADXL[0] = 0;
+	  systemConfig.calibrationADXL[1] = 0;
+	  systemConfig.calibrationADXL[2] = 0;
+	  systemConfig.gyroActivatedMPU = false;
+	  systemConfig.calibrationDelay = 3;
+	  systemConfig.acquisitionDelay = 0;
+	  systemConfig.magicNumber = VALID_MAGIC;
+	  saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
+  } else {
+	  chprintf((BaseSequentialStream *)&SD1,"Good system config in EEPROM\r\n");
+  }
+
+  printSystemConfig(&systemConfig);
+
   I2CInit();
 
   sensorStartup();
@@ -653,7 +668,7 @@ int main(void) {
   /* Init thread queue (unlock accelerometer threads from interruption) */
   osalThreadQueueObjectInit(&threadQueue);
 
-  SystemState = IDLE;
+  systemState = IDLE;
 
   /* We've finished the initialization */
   blinkAllLeds();
