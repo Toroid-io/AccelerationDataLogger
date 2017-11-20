@@ -616,7 +616,7 @@ static THD_FUNCTION(Thread6, arg) {
   uint8_t buffer;
   int32_t print_memoryCounter;
 
-  while(true) {
+  while (true) {
 	  sdAsynchronousRead(&SD1, &buffer, 1);
 	  if (buffer != 'r') {
 		  buffer = 0;
@@ -755,7 +755,7 @@ int main(void) {
   extStart(&EXTD1, &extcfg);
 
   /*
-   * Normal main() thread activity. Blink leds and handle all possible errors
+   * Normal main() thread activity. Blink leds and handle all catastrophic errors.
    */
   while (true) {
 	  palClearPad(GPIOC, GPIOC_LED_1);
@@ -768,12 +768,9 @@ int main(void) {
 low_voltage_handler:
 		  /* Give a huge priority and run an infinite loop.
 		   * Nobody will preempt us */
-
-		  /* TODO
-		   * Stop ADC
-		   * Stop threads instead of boosting priority?
-		   */
 		  chThdSetPriority(NORMALPRIO+10);
+		  adcStopConversion(&ADCD1);
+		  adcStop(&ADCD1);
 		  while (true) {
 			  for (uint32_t i = 0; i < 400000; ++i);
 			  palSetPad(GPIOB, GPIOB_LED_4);
