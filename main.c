@@ -34,8 +34,8 @@ static mailbox_t free_buffers;
 static msg_t filled_buffers_queue[NUM_BUFFERS];
 static mailbox_t filled_buffers;
 
+#define SPI_RAM_SIZE 128*1024
 /* Mutex used to analyze the amount of memory available */
-#define SPI_RAM_SIZE 80*1024
 static MUTEX_DECL(memoryCounter_mutex);
 volatile int32_t memoryCounter;
 
@@ -48,20 +48,11 @@ static threads_queue_t threadQueue;
 #define ADC_GRP_BUF_DEPTH      128
 static adcsample_t samples[ADC_GRP_NUM_CHANNELS * ADC_GRP_BUF_DEPTH];
 
-/*
- * SPI RX buffer
- */
-
-static union Rxbuf {
-	uint8_t c[32];
-	int16_t i[16];
-} rxbuf;
-
 /*===========================================================================*/
 /* Callbacks                                                                 */
 /*===========================================================================*/
 
-/* Triggered when the button is released.*/
+/* Triggered when the calibration button is released.*/
 static void extcb1(EXTDriver *extp, expchannel_t channel) {
   (void)extp;
   (void)channel;
@@ -71,6 +62,7 @@ static void extcb1(EXTDriver *extp, expchannel_t channel) {
   chSysUnlockFromISR();
 }
 
+/* Triggered when the acquisition button is released.*/
 static void extcb2(EXTDriver *extp, expchannel_t channel) {
   (void)extp;
   (void)channel;
@@ -97,22 +89,6 @@ static void gpt3cb(GPTDriver *gptp) {
 /* Peripherals config structures                                             */
 /*===========================================================================*/
 
-#if (USE_BITBANG_I2C)
-static const I2CConfig softI2C1 = {
-	false,
-	I2C1_SCL_LINE,
-	I2C1_SDA_LINE,
-	4000
-};
-
-static const I2CConfig softI2C2 = {
-	false,
-	I2C2_SCL_LINE,
-	I2C2_SDA_LINE,
-	4000
-};
-#else
-
 static const I2CConfig i2ccfg1 = {
 	0x20803C54, // Normal mode, 100kHz
 	0,
@@ -124,9 +100,6 @@ static const I2CConfig i2ccfg2 = {
 	0,
 	0
 };
-
-#endif
-
 static const SPIConfig eepromSPI = {
 	NULL,
 	GPIOA,
@@ -241,10 +214,6 @@ static void I2CInit(void)
 		}
 	}
 
-#if USE_BITBANG_I2C
-	i2cStart(&I2CD1, &softI2C1);
-	i2cStart(&I2CD2, &softI2C2);
-#else
 	/*
 	 * Activates the I2C driver in hardware mode
 	 */
@@ -258,7 +227,6 @@ static void I2CInit(void)
 		      PAL_STM32_OSPEED_HIGHEST | PAL_STM32_OTYPE_OPENDRAIN | PAL_STM32_PUPDR_PULLUP);
 	i2cStart(&I2CD1, &i2ccfg1);
 	i2cStart(&I2CD2, &i2ccfg2);
-#endif
 }
 
 static void calibrateSensors(void)
@@ -605,6 +573,10 @@ static THD_FUNCTION(Thread6, arg) {
   (void)arg;
   chRegSetThreadName("UART printer");
 
+  union Rxbuf {
+	  uint8_t c[32];
+	  int16_t i[16];
+  } rxbuf;
 
   char readCommandAddress[5];
   readCommandAddress[0] = 0x3;

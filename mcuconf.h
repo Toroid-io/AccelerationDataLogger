@@ -130,11 +130,6 @@
 /*
  * I2C driver system settings.
  */
-#define USE_BITBANG_I2C                     FALSE
-#if USE_BITBANG_I2C
-#define SW_I2C_USE_I2C1                     TRUE
-#define SW_I2C_USE_I2C2                     TRUE
-#else
 #define STM32_I2C_USE_I2C1                  TRUE
 #define STM32_I2C_USE_I2C2                  TRUE
 #define STM32_I2C_BUSY_TIMEOUT              50
@@ -148,7 +143,6 @@
 #define STM32_I2C_I2C2_RX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 5)
 #define STM32_I2C_I2C2_TX_DMA_STREAM        STM32_DMA_STREAM_ID(1, 4)
 #define STM32_I2C_DMA_ERROR_HOOK(i2cp)      osalSysHalt("DMA failure")
-#endif
 
 /*
  * I2S driver system settings.
