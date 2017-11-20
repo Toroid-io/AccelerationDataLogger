@@ -214,7 +214,7 @@
  * PA15 - NOT_USED                  (input pullup).
  */
 #define VAL_GPIOA_MODER             (PIN_MODE_INPUT(GPIOA_USR_BTN_1) |      \
-                                     PIN_MODE_INPUT(GPIOA_VBAT_ADC) |       \
+                                     PIN_MODE_ANALOG(GPIOA_VBAT_ADC) |       \
                                      PIN_MODE_ALTERNATE(GPIOA_DEBUG_TX) |   \
                                      PIN_MODE_ALTERNATE(GPIOA_DEBUG_RX) |   \
                                      PIN_MODE_OUTPUT(GPIOA_SPI_CS_1) |      \
@@ -262,7 +262,7 @@
                                      PIN_OSPEED_HIGH(GPIOA_SWCLK) |         \
                                      PIN_OSPEED_HIGH(GPIOA_PIN15_NOT_USED))
 #define VAL_GPIOA_PUPDR             (PIN_PUPDR_FLOATING(GPIOA_USR_BTN_1) |    \
-                                     PIN_PUPDR_PULLUP(GPIOA_VBAT_ADC) |     \
+                                     PIN_PUPDR_FLOATING(GPIOA_VBAT_ADC) |     \
                                      PIN_PUPDR_FLOATING(GPIOA_DEBUG_TX) |   \
                                      PIN_PUPDR_FLOATING(GPIOA_DEBUG_RX) |   \
                                      PIN_PUPDR_FLOATING(GPIOA_SPI_CS_1) |     \
@@ -331,7 +331,7 @@
  * PB15 - LED_3                     (output opendrain pullup).
  */
 #define VAL_GPIOB_MODER             (PIN_MODE_OUTPUT(GPIOB_SPI_HOLD) |           \
-                                     PIN_MODE_INPUT(GPIOB_VUSB_ADC) |           \
+                                     PIN_MODE_ANALOG(GPIOB_VUSB_ADC) |           \
                                      PIN_MODE_INPUT(GPIOB_PIN2_NOT_USED) |           \
                                      PIN_MODE_INPUT(GPIOB_INT1_ADXL) |        \
                                      PIN_MODE_INPUT(GPIOB_INT2_ADXL) |           \
@@ -379,7 +379,7 @@
                                      PIN_OSPEED_HIGH(GPIOB_LED_4) |         \
                                      PIN_OSPEED_HIGH(GPIOB_LED_3))
 #define VAL_GPIOB_PUPDR             (PIN_PUPDR_PULLUP(GPIOB_SPI_HOLD) |         \
-                                     PIN_PUPDR_PULLUP(GPIOB_VUSB_ADC) |         \
+                                     PIN_PUPDR_FLOATING(GPIOB_VUSB_ADC) |         \
                                      PIN_PUPDR_PULLUP(GPIOB_PIN2_NOT_USED) |         \
                                      PIN_PUPDR_PULLUP(GPIOB_INT1_ADXL) |          \
                                      PIN_PUPDR_PULLUP(GPIOB_INT2_ADXL) |         \

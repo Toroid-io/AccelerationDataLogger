@@ -2,7 +2,6 @@
  * - Config variable sensors range (EEPROM config)
  * - Use UART for data transfer
  * - Acquisition program
- * - Read battery values
  */
 #include "ch.h"
 #include "hal.h"
@@ -43,6 +42,11 @@ volatile int32_t memoryCounter;
 /* Various semaphores to synchronize stuff */
 static BSEMAPHORE_DECL(writeSerial, 1);
 static threads_queue_t threadQueue;
+
+/* ADC variables used to test USB, Battery voltage, VRefInt, Temp */
+#define ADC_GRP_NUM_CHANNELS   2
+#define ADC_GRP_BUF_DEPTH      128
+static adcsample_t samples[ADC_GRP_NUM_CHANNELS * ADC_GRP_BUF_DEPTH];
 
 /*
  * SPI RX buffer
@@ -173,6 +177,17 @@ static const GPTConfig gpt3cfg = {
   0, 0
 };
 
+static const ADCConversionGroup adcgrpcfg = {
+  TRUE,
+  ADC_GRP_NUM_CHANNELS,
+  NULL,
+  NULL,
+  ADC_CFGR1_CONT | ADC_CFGR1_RES_12BIT,             /* CFGR1 */
+  ADC_TR(0, 0),                                     /* TR */
+  ADC_SMPR_SMP_239P5,                               /* SMPR */
+  ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL9
+};
+
 /*===========================================================================*/
 /* Functions                                                                 */
 /*===========================================================================*/
@@ -296,7 +311,6 @@ static void resetAllMailboxes(void)
 {
 	chMBReset(&free_buffers);
 	chMBReset(&filled_buffers);
-
 	createMailboxes();
 }
 
@@ -332,6 +346,46 @@ static void sensorStartup(void)
 	chprintf((BaseSequentialStream *)&SD1,"ADXL OK\r\n");
 }
 
+void getVoltages(uint16_t *vusb, uint16_t *vbat)
+{
+	uint32_t usbtmp = 0;
+	uint32_t battmp = 0;
+	/* Samples are alternating: vbat, vusb, vbat... */
+	for(uint8_t i = 0; i < ADC_GRP_BUF_DEPTH; ++i) {
+		battmp += samples[ADC_GRP_NUM_CHANNELS*i];
+		usbtmp += samples[ADC_GRP_NUM_CHANNELS*i + 1];
+	}
+	battmp /= ADC_GRP_BUF_DEPTH;
+	usbtmp /= ADC_GRP_BUF_DEPTH;
+
+	/* Reference voltage is corrected to handle resistor offset
+	 * (instead of 3300). Voltages are in mV.
+	 */
+	battmp = (battmp * 3394 * 57) / (4096 * 10);
+	usbtmp = (usbtmp * 3327 * 86) / (4096 * 47);
+
+	*vusb = (uint16_t)usbtmp;
+	*vbat = (uint16_t)battmp;
+
+	chprintf((BaseSequentialStream *)&SD1,"USB: %u - BAT: %u\r\n",
+		 *vusb, *vbat);
+	return;
+}
+
+uint8_t checkVoltageLevel(void)
+{
+	uint16_t vusb, vbat;
+	getVoltages(&vusb, &vbat);
+	/* When running with USB voltage should not be a problem */
+	if (vusb > 4000)
+		return 0;
+	  /* When running on batteries, 6.8V seems a logic voltage threshold */
+	if (vbat < 6800) {
+		return 1;
+	}
+	return 0;
+}
+
 
 /*===========================================================================*/
 /* Threads                                                                   */
@@ -342,7 +396,7 @@ static void sensorStartup(void)
 static THD_WORKING_AREA(waThread0, 0x800);
 static THD_FUNCTION(Thread0, arg) {
 	(void)arg;
-	while(true) {
+	while (true) {
 		switch(systemState) {
 		case IDLE:
 		default:
@@ -416,7 +470,6 @@ static THD_FUNCTION(Thread1, arg) {
     chThdEnqueueTimeoutS(&threadQueue, TIME_INFINITE);
     chSysUnlock();
 
-    palSetPad(GPIOB, GPIOB_LED_3);
     MPU6050_getAcceleration(&ax, &ay, &az);
 
     ax -= systemConfig.calibrationMPU[0];
@@ -459,7 +512,6 @@ static THD_FUNCTION(Thread2, arg) {
     chThdEnqueueTimeoutS(&threadQueue, TIME_INFINITE);
     chSysUnlock();
 
-    palSetPad(GPIOB, GPIOB_LED_4);
     ADXL345_getAcceleration(&ax, &ay, &az);
     modifyAxis(&ax, &ay, &az);
 
@@ -642,6 +694,13 @@ int main(void) {
    */
   blinkAllLeds();
 
+  /* Start ADC, wait for some samples and check for battery level*/
+  adcStart(&ADCD1, NULL);
+  adcStartConversion(&ADCD1, &adcgrpcfg, samples, ADC_GRP_BUF_DEPTH);
+  chThdSleepMilliseconds(100);
+  if (checkVoltageLevel())
+	  goto low_voltage_handler;
+
   /* Get and verify system config from EEPROM */
   if (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
 	  chprintf((BaseSequentialStream *)&SD1,"Invalid config in EEPROM\r\n");
@@ -683,15 +742,6 @@ int main(void) {
   /* We've finished the initialization */
   blinkAllLeds();
 
-  /* NOTE
-   * Differences between the RAM and the EEPROM
-   *
-   * RAM -> Command + 3 bytes (address)
-   * EEPROM -> Command + 1 byte (address)
-   *
-   * EEPROM needs a WREN before writing (and to leave up CS)!!!
-   */
-
   /*
    * Creates the threads
    */
@@ -705,12 +755,32 @@ int main(void) {
   extStart(&EXTD1, &extcfg);
 
   /*
-   * Normal main() thread activity
+   * Normal main() thread activity. Blink leds and handle all possible errors
    */
   while (true) {
-    palClearPad(GPIOC, GPIOC_LED_1);
-    osalThreadSleepMilliseconds(500);
-    palSetPad(GPIOC, GPIOC_LED_1);
-    osalThreadSleepMilliseconds(500);
+	  palClearPad(GPIOC, GPIOC_LED_1);
+	  osalThreadSleepMilliseconds(500);
+	  palSetPad(GPIOC, GPIOC_LED_1);
+	  osalThreadSleepMilliseconds(500);
+
+	  /* Check if voltage levels are good */
+	  if (checkVoltageLevel()) {
+low_voltage_handler:
+		  /* Give a huge priority and run an infinite loop.
+		   * Nobody will preempt us */
+
+		  /* TODO
+		   * Stop ADC
+		   * Stop threads instead of boosting priority?
+		   */
+		  chThdSetPriority(NORMALPRIO+10);
+		  while (true) {
+			  for (uint32_t i = 0; i < 400000; ++i);
+			  palSetPad(GPIOB, GPIOB_LED_4);
+			  for (uint32_t i = 0; i < 400000; ++i);
+			  palClearPad(GPIOB, GPIOB_LED_4);
+
+		  }
+	  }
   }
 }
