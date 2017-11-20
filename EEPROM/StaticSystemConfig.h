@@ -20,6 +20,7 @@ uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
 				  struct configStructure *sysConfig);
 void saveSystemConfigEEPROM(const SPIConfig *spiConfig,
 			    struct configStructure *sysConfig);
+void saveDefaultConfigEEPROM(const SPIConfig *spiConfig);
 void printSystemConfig(struct configStructure *sysConfig);
 
 #endif /* STATICCONFIG_H */

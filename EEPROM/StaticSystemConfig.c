@@ -30,6 +30,27 @@ void saveSystemConfigEEPROM(const SPIConfig *spiConfig,
 			  (uint8_t *)sysConfig);
 }
 
+void saveDefaultConfigEEPROM(const SPIConfig *spiConfig)
+{
+	struct configStructure defaultConfig;
+	defaultConfig.samplingSpeed = 800;
+	defaultConfig.accelerometerRange = 2;
+	defaultConfig.calibrationMPU[0] = 0;
+	defaultConfig.calibrationMPU[1] = 0;
+	defaultConfig.calibrationMPU[2] = 0;
+	defaultConfig.calibrationADXL[0] = 0;
+	defaultConfig.calibrationADXL[1] = 0;
+	defaultConfig.calibrationADXL[2] = 0;
+	defaultConfig.gyroActivatedMPU = false;
+	defaultConfig.calibrationDelay = 3;
+	defaultConfig.acquisitionDelay = 0;
+	defaultConfig.magicNumber = VALID_MAGIC;
+	EEPROM_writeBytes(&SPID1,
+			  spiConfig,
+			  0,
+			  sizeof(struct configStructure),
+			  (uint8_t *)&defaultConfig);
+}
 void printSystemConfig(struct configStructure *sysConfig)
 {
 	BaseSequentialStream *stream = (BaseSequentialStream *)&SD1;

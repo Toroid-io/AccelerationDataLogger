@@ -702,25 +702,12 @@ int main(void) {
 	  goto low_voltage_handler;
 
   /* Get and verify system config from EEPROM */
-  if (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
+  while (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
 	  chprintf((BaseSequentialStream *)&SD1,"Invalid config in EEPROM\r\n");
-	  /* Some safe defaults */
-	  systemConfig.samplingSpeed = 800;
-	  systemConfig.accelerometerRange = 2;
-	  systemConfig.calibrationMPU[0] = 0;
-	  systemConfig.calibrationMPU[1] = 0;
-	  systemConfig.calibrationMPU[2] = 0;
-	  systemConfig.calibrationADXL[0] = 0;
-	  systemConfig.calibrationADXL[1] = 0;
-	  systemConfig.calibrationADXL[2] = 0;
-	  systemConfig.gyroActivatedMPU = false;
-	  systemConfig.calibrationDelay = 3;
-	  systemConfig.acquisitionDelay = 0;
-	  systemConfig.magicNumber = VALID_MAGIC;
-	  saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
-  } else {
-	  chprintf((BaseSequentialStream *)&SD1,"Good system config in EEPROM\r\n");
+	  chprintf((BaseSequentialStream *)&SD1,"Writing a new one...\r\n");
+	  saveDefaultConfigEEPROM(&eepromSPI);
   }
+  chprintf((BaseSequentialStream *)&SD1,"Good system config in EEPROM\r\n");
 
   printSystemConfig(&systemConfig);
 
@@ -742,9 +729,7 @@ int main(void) {
   /* We've finished the initialization */
   blinkAllLeds();
 
-  /*
-   * Creates the threads
-   */
+  /* Creates the threads */
   chThdCreateStatic(waThread0, sizeof(waThread0), NORMALPRIO+5, Thread0, NULL); // State machine thread
   chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+2, Thread1, NULL); // MPU goes always first
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
@@ -754,8 +739,8 @@ int main(void) {
   /* Enable external (button) interrupts */
   extStart(&EXTD1, &extcfg);
 
-  /*
-   * Normal main() thread activity. Blink leds and handle all catastrophic errors.
+  /* Normal main() thread activity.
+   * Blink leds and handle all catastrophic errors.
    */
   while (true) {
 	  palClearPad(GPIOC, GPIOC_LED_1);
