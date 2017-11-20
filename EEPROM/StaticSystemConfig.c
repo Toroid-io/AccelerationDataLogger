@@ -2,8 +2,8 @@
 #include "hal.h"
 #include "ChibiOS/os/hal/lib/streams/chprintf.h"
 
-#include "staticConfig.h"
-#include "EEPROM.h"
+#include "StaticSystemConfig.h"
+#include "SPI_25LC01.h"
 
 uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
 				  struct configStructure *sysConfig)

@@ -114,11 +114,11 @@ CSRC = $(STARTUPSRC) \
        $(PLATFORMSRC) \
        $(BOARDSRC) \
 	   $(CHIBIOS)/os/hal/lib/streams/chprintf.c \
-	   I2Cdev.c \
-	   EEPROM.c \
-	   staticConfig.c \
-	   MPU6050.c \
-	   ADXL345.c \
+	   MEMS/I2Cdev.c \
+	   MEMS/MPU6050.c \
+	   MEMS/ADXL345.c \
+	   EEPROM/SPI_25LC01.c \
+	   EEPROM/StaticSystemConfig.c \
 	   main.c
 
 # C++ sources that can be compiled in ARM or THUMB mode depending on the global

@@ -6,9 +6,9 @@
 #include "ch.h"
 #include "hal.h"
 #include "ChibiOS/os/hal/lib/streams/chprintf.h"
-#include "MPU6050.h"
-#include "ADXL345.h"
-#include "staticConfig.h"
+#include "MEMS/MPU6050.h"
+#include "MEMS/ADXL345.h"
+#include "EEPROM/StaticSystemConfig.h"
 
 
 /*===========================================================================*/

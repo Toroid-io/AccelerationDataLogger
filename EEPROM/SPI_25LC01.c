@@ -1,6 +1,6 @@
 #include "ch.h"
 #include "hal.h"
-#include "EEPROM.h"
+#include "SPI_25LC01.h"
 
 int8_t	EEPROM_readBytes (SPIDriver *spip,
 			   const SPIConfig *config,
