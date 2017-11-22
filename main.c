@@ -335,8 +335,8 @@ void getVoltages(uint16_t *vusb, uint16_t *vbat)
 	*vusb = (uint16_t)usbtmp;
 	*vbat = (uint16_t)battmp;
 
-	chprintf((BaseSequentialStream *)&SD1,"USB: %u - BAT: %u\r\n",
-		 *vusb, *vbat);
+	//chprintf((BaseSequentialStream *)&SD1,"USB: %u - BAT: %u\r\n",
+	//	 *vusb, *vbat);
 	return;
 }
 
@@ -410,8 +410,16 @@ static THD_FUNCTION(Thread0, arg) {
 			 * State changement will be done in the RAM write task
 			 */
 			break;
-		case PRINT:
+		case START_PRINT:
+			chMtxLock(&systemState_mutex);
+			systemState = PRINT;
+			chMtxUnlock(&systemState_mutex);
 			chBSemSignal(&writeSerial);
+			break;
+		case PRINT:
+			/* Nothing to do here
+			 * State changement will be done in the RAM write task
+			 */
 			break;
 		}
 		chThdSleepMilliseconds(100);
@@ -504,8 +512,8 @@ static THD_FUNCTION(Thread2, arg) {
 /*
  * SPI bus thread
  */
-static THD_WORKING_AREA(waThread5, 256);
-static THD_FUNCTION(Thread5, arg) {
+static THD_WORKING_AREA(waThread3, 256);
+static THD_FUNCTION(Thread3, arg) {
 
   (void)arg;
 
@@ -568,8 +576,8 @@ static THD_FUNCTION(Thread5, arg) {
  * This is activated after the last reading.
  * Fetches the content from the SPI RAM and prints to the serial console
  */
-static THD_WORKING_AREA(waThread6, 256);
-static THD_FUNCTION(Thread6, arg) {
+static THD_WORKING_AREA(waThread4, 256);
+static THD_FUNCTION(Thread4, arg) {
   (void)arg;
   chRegSetThreadName("UART printer");
 
@@ -583,58 +591,88 @@ static THD_FUNCTION(Thread6, arg) {
   readCommandAddress[1] = 0;
   readCommandAddress[2] = 0;
   readCommandAddress[3] = 0;
-  readCommandAddress[4] = 0; // needed for the exchange
 
-  uint8_t buffer;
   int32_t print_memoryCounter;
-
+  systime_t oldt;
   while (true) {
-	  sdAsynchronousRead(&SD1, &buffer, 1);
-	  if (buffer != 'r') {
-		  buffer = 0;
-		  chThdSleepMilliseconds(100);
-		  continue;
-	  }
-	  chMtxLock(&systemState_mutex);
-	  systemState = PRINT;
-	  chMtxUnlock(&systemState_mutex);
+
+	  chBSemWait(&writeSerial);
+	  /* measure execution time */
+	  oldt = chVTGetSystemTimeX();
+
 	  print_memoryCounter = memoryCounter;
 	  /* We will block the SPI device while printing */
 	  spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
 	  spiStart(&SPID1, &ramSPI);       /* Setup transfer parameters.       */
 	  spiSelect(&SPID1);                  /* Slave Select assertion.          */
-	  spiExchange(&SPID1, 5, readCommandAddress, rxbuf.c);
-	  char id = rxbuf.c[4];
-	  while (true) {
-		  spiReceive(&SPID1, 6, rxbuf.c);          /* Atomic transfer operations.      */
+	  spiExchange(&SPID1, 4, readCommandAddress, rxbuf.c);
+	  while (print_memoryCounter > 0) {
+		  /* Get the sensor ID */
+		  spiReceive(&SPID1, 1, rxbuf.c);
+		  char id = rxbuf.c[0];
+		  /* Get the sensor content */
+		  spiReceive(&SPID1, 6, rxbuf.c);
 		  print_memoryCounter -= 7;
-		  if (id == 'A') {
-			  chprintf((BaseSequentialStream *)&SD1,"%ld:A:%d:%d:%d;\r\n",
-				   print_memoryCounter,
+		  switch (id) {
+		  case 'A':
+			  chprintf((BaseSequentialStream *)&SD1,"%d:A:%d:%d:%d;",
+				   (int16_t)(print_memoryCounter/1024),
 				   rxbuf.i[0],
 				   rxbuf.i[1],
 				   rxbuf.i[2]);
-		  }
-		  else if (id == 'M') {
-			  chprintf((BaseSequentialStream *)&SD1,"%ld:M:%d:%d:%d;\r\n",
-				   print_memoryCounter,
-				   rxbuf.i[0],
-				   rxbuf.i[1],
-				   rxbuf.i[2]);
-		  } else {
-			  chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown device in memory\r\n");
-		  }
-		  if (print_memoryCounter <= 0)
 			  break;
-		  spiReceive(&SPID1, 1, &id);          /* Atomic transfer operations.      */
+		  case 'M':
+			  chprintf((BaseSequentialStream *)&SD1,"%d:M:%d:%d:%d;",
+				   (int16_t)(print_memoryCounter/1024),
+				   rxbuf.i[0],
+				   rxbuf.i[1],
+				   rxbuf.i[2]);
+			  break;
+		  default:
+			  chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown device in RAM\r\n");
+			  break;
+		  }
 	  }
+	  /* measure execution time */
 	  spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
 	  spiReleaseBus(&SPID1);              /* Ownership release.               */
-	  chprintf((BaseSequentialStream *)&SD1,"Printing finished");
+	  chprintf((BaseSequentialStream *)&SD1,"\r\nPrinting finished - %lu\r\n", chVTGetSystemTimeX()-oldt);
 	  chMtxLock(&systemState_mutex);
 	  systemState = IDLE;
 	  chMtxUnlock(&systemState_mutex);
   }
+}
+
+static THD_WORKING_AREA(waThread5, 128);
+static THD_FUNCTION(Thread5, arg) {
+	(void)arg;
+	chRegSetThreadName("UART listener");
+
+	event_listener_t elSerData;
+	eventmask_t flags;
+	chEvtRegisterMask((event_source_t *)chnGetEventSource(&SD1), &elSerData, EVENT_MASK(1));
+	while (true) {
+		chEvtWaitOneTimeout(EVENT_MASK(1), MS2ST(500));
+		flags = chEvtGetAndClearFlags(&elSerData);
+		if (flags & CHN_INPUT_AVAILABLE) {
+			msg_t charbuf;
+			do {
+				charbuf = chnGetTimeout(&SD1, TIME_IMMEDIATE);
+				if ( charbuf != Q_TIMEOUT ) {
+					switch (charbuf) {
+					case 'r':
+					case 'R':
+						if (systemState == IDLE) {
+							chMtxLock(&systemState_mutex);
+							systemState = START_PRINT;
+							chMtxUnlock(&systemState_mutex);
+						}
+
+					}
+				}
+			} while (charbuf != Q_TIMEOUT);
+		}
+	}
 }
 
 /*===========================================================================*/
@@ -703,10 +741,11 @@ int main(void) {
 
   /* Creates the threads */
   chThdCreateStatic(waThread0, sizeof(waThread0), NORMALPRIO+5, Thread0, NULL); // State machine thread
-  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+2, Thread1, NULL); // MPU goes always first
-  chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+1, Thread2, NULL); // ADXL
-  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO,   Thread5, NULL); // SPI
-  chThdCreateStatic(waThread6, sizeof(waThread6), NORMALPRIO-5, Thread6, NULL); // Serial printer
+  chThdCreateStatic(waThread1, sizeof(waThread1), NORMALPRIO+3, Thread1, NULL); // MPU goes always first
+  chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+2, Thread2, NULL); // ADXL
+  chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO,   Thread3, NULL); // SPI
+  chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO-5, Thread4, NULL); // Serial printer
+  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO-10, Thread5, NULL); // Serial event reader
 
   /* Enable external (button) interrupts */
   extStart(&EXTD1, &extcfg);
