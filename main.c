@@ -581,10 +581,7 @@ static THD_FUNCTION(Thread4, arg) {
   (void)arg;
   chRegSetThreadName("UART printer");
 
-  union Rxbuf {
-	  uint8_t c[32];
-	  int16_t i[16];
-  } rxbuf;
+  uint8_t rxbuf[16];
 
   char readCommandAddress[5];
   readCommandAddress[0] = 0x3;
@@ -605,33 +602,11 @@ static THD_FUNCTION(Thread4, arg) {
 	  spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
 	  spiStart(&SPID1, &ramSPI);       /* Setup transfer parameters.       */
 	  spiSelect(&SPID1);                  /* Slave Select assertion.          */
-	  spiExchange(&SPID1, 4, readCommandAddress, rxbuf.c);
+	  spiExchange(&SPID1, 4, readCommandAddress, rxbuf);
 	  while (print_memoryCounter > 0) {
-		  /* Get the sensor ID */
-		  spiReceive(&SPID1, 1, rxbuf.c);
-		  char id = rxbuf.c[0];
-		  /* Get the sensor content */
-		  spiReceive(&SPID1, 6, rxbuf.c);
+		  spiReceive(&SPID1, 7, rxbuf);
+		  streamWrite((BaseSequentialStream *)&SD1, rxbuf, 7);
 		  print_memoryCounter -= 7;
-		  switch (id) {
-		  case 'A':
-			  chprintf((BaseSequentialStream *)&SD1,"%d:A:%d:%d:%d;",
-				   (int16_t)(print_memoryCounter/1024),
-				   rxbuf.i[0],
-				   rxbuf.i[1],
-				   rxbuf.i[2]);
-			  break;
-		  case 'M':
-			  chprintf((BaseSequentialStream *)&SD1,"%d:M:%d:%d:%d;",
-				   (int16_t)(print_memoryCounter/1024),
-				   rxbuf.i[0],
-				   rxbuf.i[1],
-				   rxbuf.i[2]);
-			  break;
-		  default:
-			  chprintf((BaseSequentialStream *)&SD1,"ERROR: Unknown device in RAM\r\n");
-			  break;
-		  }
 	  }
 	  /* measure execution time */
 	  spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
