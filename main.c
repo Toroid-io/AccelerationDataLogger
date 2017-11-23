@@ -622,31 +622,30 @@ static THD_WORKING_AREA(waThread5, 128);
 static THD_FUNCTION(Thread5, arg) {
 	(void)arg;
 	chRegSetThreadName("UART listener");
-
 	event_listener_t elSerData;
-	eventmask_t flags;
-	chEvtRegisterMask((event_source_t *)chnGetEventSource(&SD1), &elSerData, EVENT_MASK(1));
+	chEvtRegisterMaskWithFlags((event_source_t *)chnGetEventSource(&SD1),
+				   &elSerData,
+				   EVENT_MASK(1),
+				   CHN_INPUT_AVAILABLE);
 	while (true) {
-		chEvtWaitOneTimeout(EVENT_MASK(1), MS2ST(500));
-		flags = chEvtGetAndClearFlags(&elSerData);
-		if (flags & CHN_INPUT_AVAILABLE) {
-			msg_t charbuf;
-			do {
-				charbuf = chnGetTimeout(&SD1, TIME_IMMEDIATE);
-				if ( charbuf != Q_TIMEOUT ) {
-					switch (charbuf) {
-					case 'r':
-					case 'R':
-						if (systemState == IDLE) {
-							chMtxLock(&systemState_mutex);
-							systemState = START_PRINT;
-							chMtxUnlock(&systemState_mutex);
-						}
-
+		chEvtWaitOne(EVENT_MASK(1));
+		chEvtGetAndClearFlags(&elSerData);
+		msg_t charbuf;
+		do {
+			charbuf = chnGetTimeout(&SD1, TIME_IMMEDIATE);
+			if ( charbuf != Q_TIMEOUT ) {
+				switch (charbuf) {
+				case 'r':
+				case 'R':
+					if (systemState == IDLE) {
+						chMtxLock(&systemState_mutex);
+						systemState = START_PRINT;
+						chMtxUnlock(&systemState_mutex);
 					}
+
 				}
-			} while (charbuf != Q_TIMEOUT);
-		}
+			}
+		} while (charbuf != Q_TIMEOUT);
 	}
 }
 
