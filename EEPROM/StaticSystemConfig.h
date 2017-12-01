@@ -6,14 +6,14 @@
 #define VALID_MAGIC 0xADDA
 
 struct configStructure {
-	uint16_t samplingSpeed;
-	uint8_t accelerometerRange;
 	int16_t calibrationMPU[3];
 	int16_t calibrationADXL[3];
+	uint16_t magicNumber;
+	uint16_t samplingSpeed;
+	uint8_t accelerometerRange;
 	uint8_t calibrationDelay;
 	uint8_t acquisitionDelay;
 	bool gyroActivatedMPU;
-	uint16_t magicNumber;
 };
 
 uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
@@ -21,6 +21,6 @@ uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
 void saveSystemConfigEEPROM(const SPIConfig *spiConfig,
 			    struct configStructure *sysConfig);
 void saveDefaultConfigEEPROM(const SPIConfig *spiConfig);
-void printSystemConfig(struct configStructure *sysConfig);
+void printSystemConfig(struct configStructure *sysConfig, BaseSequentialStream *stream, bool simple);
 
 #endif /* STATICCONFIG_H */

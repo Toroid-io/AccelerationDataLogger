@@ -166,9 +166,11 @@ static const ADCConversionGroup adcgrpcfg = {
 /*===========================================================================*/
 void modifyAxis(int16_t *ax, int16_t *ay, int16_t *az)
 {
+	uint16_t tmp;
 	*az= -*az;
-	*ax = *ax;
-	*ay = -*ay;
+	tmp = *ax;
+	*ax = -*ay;
+	*ay = -tmp;
 }
 
 static void led2off(void *arg) {
@@ -264,7 +266,7 @@ static void calibrateSensors(void)
   saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
 
   /* We finished the calibration here*/
-  //chprintf((BaseSequentialStream *)&SD1,"Calibration finished\r\n");
+  //chprintf((BaseSequentialStream *)&SD2,"Calibration finished\r\n");
 }
 
 void createMailboxes(void)
@@ -298,20 +300,20 @@ static void sensorStartup(void)
 	chThdSleepMilliseconds(100);
 	// verify connection
 	while (!MPU6050_testConnection()) {
-		chprintf((BaseSequentialStream *)&SD1,"MPU FAIL\r\n");
+		//chprintf((BaseSequentialStream *)&SD2,"MPU FAIL\r\n");
 		chThdSleepMilliseconds(1000);
 	}
-	chprintf((BaseSequentialStream *)&SD1,"MPU OK\r\n");
+	//chprintf((BaseSequentialStream *)&SD2,"MPU OK\r\n");
 
 	/* Initialize ADXL345 */
 	ADXL345_initialize();
 	chThdSleepMilliseconds(100);
 	// verify connection
 	while (!ADXL345_testConnection()) {
-		chprintf((BaseSequentialStream *)&SD1,"ADXL FAIL\r\n");
+		//chprintf((BaseSequentialStream *)&SD2,"ADXL FAIL\r\n");
 		chThdSleepMilliseconds(1000);
 	}
-	chprintf((BaseSequentialStream *)&SD1,"ADXL OK\r\n");
+	//chprintf((BaseSequentialStream *)&SD2,"ADXL OK\r\n");
 }
 
 void getVoltages(uint16_t *vusb, uint16_t *vbat)
@@ -335,7 +337,7 @@ void getVoltages(uint16_t *vusb, uint16_t *vbat)
 	*vusb = (uint16_t)usbtmp;
 	*vbat = (uint16_t)battmp;
 
-	//chprintf((BaseSequentialStream *)&SD1,"USB: %u - BAT: %u\r\n",
+	//chprintf((BaseSequentialStream *)&SD2,"USB: %u - BAT: %u\r\n",
 	//	 *vusb, *vbat);
 	return;
 }
@@ -361,7 +363,7 @@ uint8_t checkVoltageLevel(void)
 /*
  * State machine thread
  */
-static THD_WORKING_AREA(waThread0, 0x800);
+static THD_WORKING_AREA(waThread0, 0x200);
 static THD_FUNCTION(Thread0, arg) {
 	(void)arg;
 	while (true) {
@@ -370,7 +372,7 @@ static THD_FUNCTION(Thread0, arg) {
 		default:
 			break;
 		case CALIBRATION:
-			chprintf((BaseSequentialStream *)&SD1,"Calibration...\r\n");
+			//chprintf((BaseSequentialStream *)&SD2,"Calibration...\r\n");
 			if (systemConfig.calibrationDelay > 0)
 				for (uint8_t i = 0; i < 10*systemConfig.calibrationDelay; i++) {
 					palClearPad(GPIOC, GPIOC_LED_2);
@@ -380,13 +382,13 @@ static THD_FUNCTION(Thread0, arg) {
 
 				}
 			calibrateSensors();
-			chprintf((BaseSequentialStream *)&SD1,"Calibration DONE\r\n");
+			//chprintf((BaseSequentialStream *)&SD2,"Calibration DONE\r\n");
 			chMtxLock(&systemState_mutex);
 			systemState = IDLE;
 			chMtxUnlock(&systemState_mutex);
 			break;
 		case START_ACQUISITION:
-			chprintf((BaseSequentialStream *)&SD1,"Acquisition...\r\n");
+			//chprintf((BaseSequentialStream *)&SD2,"Acquisition...\r\n");
 			if (systemConfig.acquisitionDelay > 0)
 				for (uint8_t i = 0; i < 10*systemConfig.acquisitionDelay; i++) {
 					palClearPad(GPIOC, GPIOC_LED_2);
@@ -428,7 +430,7 @@ static THD_FUNCTION(Thread0, arg) {
 /*
  * MPU6050  polling thread.
  */
-static THD_WORKING_AREA(waThread1, 0x800);
+static THD_WORKING_AREA(waThread1, 0x200);
 static THD_FUNCTION(Thread1, arg) {
 
   (void)arg;
@@ -437,8 +439,9 @@ static THD_FUNCTION(Thread1, arg) {
   chRegSetThreadName("MPU6050_Poll");
 
   int16_t ax, ay, az;
+  int32_t axb, ayb, azb;
 
-  chprintf((BaseSequentialStream *)&SD1,"MPU Thread\r\n");
+  //chprintf((BaseSequentialStream *)&SD2,"MPU Thread\r\n");
 
   while (true) {
     /* wait until the timer starts */
@@ -448,9 +451,30 @@ static THD_FUNCTION(Thread1, arg) {
 
     MPU6050_getAcceleration(&ax, &ay, &az);
 
-    ax -= systemConfig.calibrationMPU[0];
-    ay -= systemConfig.calibrationMPU[1];
-    az -= systemConfig.calibrationMPU[2];
+    axb = ax - systemConfig.calibrationMPU[0];
+    ayb = ay - systemConfig.calibrationMPU[1];
+    azb = az - systemConfig.calibrationMPU[2];
+
+    if (axb > INT16_MAX)
+	    ax = INT16_MAX;
+    else if (axb < INT16_MIN)
+	    ax = INT16_MIN;
+    else
+	    ax = (int16_t)axb;
+
+    if (ayb > INT16_MAX)
+	    ay = INT16_MAX;
+    else if (ayb < INT16_MIN)
+	    ay = INT16_MIN;
+    else
+	    ay = (int16_t)ayb;
+
+    if (azb > INT16_MAX)
+	    az = INT16_MAX;
+    else if (azb < INT16_MIN)
+	    az = INT16_MIN;
+    else
+	    az = (int16_t)azb;
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
@@ -470,7 +494,7 @@ static THD_FUNCTION(Thread1, arg) {
 /*
  * ADXL345  polling thread.
  */
-static THD_WORKING_AREA(waThread2, 0x800);
+static THD_WORKING_AREA(waThread2, 0x200);
 static THD_FUNCTION(Thread2, arg) {
 
   (void)arg;
@@ -479,8 +503,9 @@ static THD_FUNCTION(Thread2, arg) {
   chRegSetThreadName("ADXL345_Poll");
 
   int16_t ax, ay, az;
+  int32_t axb, ayb, azb;
 
-  chprintf((BaseSequentialStream *)&SD1,"ADXL Thread\r\n");
+  //chprintf((BaseSequentialStream *)&SD2,"ADXL Thread\r\n");
 
   while (true) {
     /* wait until the timer says */
@@ -491,9 +516,30 @@ static THD_FUNCTION(Thread2, arg) {
     ADXL345_getAcceleration(&ax, &ay, &az);
     modifyAxis(&ax, &ay, &az);
 
-    ax -= systemConfig.calibrationADXL[0];
-    ay -= systemConfig.calibrationADXL[1];
-    az -= systemConfig.calibrationADXL[2];
+    axb = ax - systemConfig.calibrationADXL[0];
+    ayb = ay - systemConfig.calibrationADXL[1];
+    azb = az - systemConfig.calibrationADXL[2];
+
+    if (axb > INT16_MAX)
+	    ax = INT16_MAX;
+    else if (axb < INT16_MIN)
+	    ax = INT16_MIN;
+    else
+	    ax = (int16_t)axb;
+
+    if (ayb > INT16_MAX)
+	    ay = INT16_MAX;
+    else if (ayb < INT16_MIN)
+	    ay = INT16_MIN;
+    else
+	    ay = (int16_t)ayb;
+
+    if (azb > INT16_MAX)
+	    az = INT16_MAX;
+    else if (azb < INT16_MIN)
+	    az = INT16_MIN;
+    else
+	    az = (int16_t)azb;
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
@@ -512,7 +558,7 @@ static THD_FUNCTION(Thread2, arg) {
 /*
  * SPI bus thread
  */
-static THD_WORKING_AREA(waThread3, 256);
+static THD_WORKING_AREA(waThread3, 0x200);
 static THD_FUNCTION(Thread3, arg) {
 
   (void)arg;
@@ -521,6 +567,9 @@ static THD_FUNCTION(Thread3, arg) {
 
   char writeCommandAddress[4];
   writeCommandAddress[0] = 0x2;
+  writeCommandAddress[1] = 0;
+  writeCommandAddress[2] = 0;
+  writeCommandAddress[3] = 0;
 
   chMtxLock(&memoryCounter_mutex);
   memoryCounter = 0;
@@ -543,7 +592,7 @@ static THD_FUNCTION(Thread3, arg) {
 	      chMtxLock(&systemState_mutex);
 	      systemState = IDLE;
 	      chMtxUnlock(&systemState_mutex);
-	      chprintf((BaseSequentialStream *)&SD1,"Acquisition DONE\r\n");
+	      //chprintf((BaseSequentialStream *)&SD2,"Acquisition DONE\r\n");
 	      resetAllMailboxes();
 	      continue;
       }
@@ -576,12 +625,12 @@ static THD_FUNCTION(Thread3, arg) {
  * This is activated after the last reading.
  * Fetches the content from the SPI RAM and prints to the serial console
  */
-static THD_WORKING_AREA(waThread4, 256);
+static THD_WORKING_AREA(waThread4, 0x200);
 static THD_FUNCTION(Thread4, arg) {
   (void)arg;
   chRegSetThreadName("UART printer");
 
-  uint8_t rxbuf[16];
+  uint8_t rxbuf[8];
 
   char readCommandAddress[5];
   readCommandAddress[0] = 0x3;
@@ -590,28 +639,27 @@ static THD_FUNCTION(Thread4, arg) {
   readCommandAddress[3] = 0;
 
   int32_t print_memoryCounter;
-  systime_t oldt;
+  //systime_t oldt;
   while (true) {
 
 	  chBSemWait(&writeSerial);
 	  /* measure execution time */
-	  oldt = chVTGetSystemTimeX();
+	  //oldt = chVTGetSystemTimeX();
 
 	  print_memoryCounter = memoryCounter;
 	  /* We will block the SPI device while printing */
 	  spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
 	  spiStart(&SPID1, &ramSPI);       /* Setup transfer parameters.       */
 	  spiSelect(&SPID1);                  /* Slave Select assertion.          */
-	  spiExchange(&SPID1, 4, readCommandAddress, rxbuf);
+	  spiSend(&SPID1, 4, readCommandAddress);
 	  while (print_memoryCounter > 0) {
 		  spiReceive(&SPID1, 7, rxbuf);
 		  streamWrite((BaseSequentialStream *)&SD1, rxbuf, 7);
 		  print_memoryCounter -= 7;
 	  }
-	  /* measure execution time */
 	  spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
 	  spiReleaseBus(&SPID1);              /* Ownership release.               */
-	  chprintf((BaseSequentialStream *)&SD1,"\r\nPrinting finished - %lu\r\n", chVTGetSystemTimeX()-oldt);
+	  //chprintf((BaseSequentialStream *)&SD2,"\r\nPrinting finished in %lu ms\r\n", (chVTGetSystemTimeX()-oldt)/10);
 	  chMtxLock(&systemState_mutex);
 	  systemState = IDLE;
 	  chMtxUnlock(&systemState_mutex);
@@ -642,6 +690,13 @@ static THD_FUNCTION(Thread5, arg) {
 						systemState = START_PRINT;
 						chMtxUnlock(&systemState_mutex);
 					}
+					break;
+				case 'g':
+				case 'G':
+					if (systemState == IDLE) {
+						printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD1, true);
+					}
+					break;
 
 				}
 			}
@@ -669,9 +724,10 @@ int main(void) {
    * Activates the serial driver 1 using the driver default configuration.
    */
   sdStart(&SD1, NULL);
+  //sdStart(&SD2, NULL);
 
-  chprintf((BaseSequentialStream *)&SD1,"Starting...\r\n");
-  chprintf((BaseSequentialStream *)&SD1, "SYSCLK=%u\r\n", STM32_SYSCLK);
+  //chprintf((BaseSequentialStream *)&SD2,"Starting...\r\n");
+  //chprintf((BaseSequentialStream *)&SD2, "SYSCLK=%u\r\n", STM32_SYSCLK);
 
   /*
    * Blink all the LEDs
@@ -687,13 +743,20 @@ int main(void) {
 
   /* Get and verify system config from EEPROM */
   while (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
-	  chprintf((BaseSequentialStream *)&SD1,"Invalid config in EEPROM\r\n");
-	  chprintf((BaseSequentialStream *)&SD1,"Writing a new one...\r\n");
+	  //chprintf((BaseSequentialStream *)&SD2,"Invalid config in EEPROM\r\n");
+	  //chprintf((BaseSequentialStream *)&SD2,"Writing a new one...\r\n");
 	  saveDefaultConfigEEPROM(&eepromSPI);
   }
-  chprintf((BaseSequentialStream *)&SD1,"Good system config in EEPROM\r\n");
+  //chprintf((BaseSequentialStream *)&SD2,"Good system config in EEPROM\r\n");
 
-  printSystemConfig(&systemConfig);
+  /* Set some hardcoded defaults
+   * FIXME
+   */
+  systemConfig.calibrationDelay = 3;
+  systemConfig.acquisitionDelay = 3;
+  systemConfig.accelerometerRange = 4;
+
+  //printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
 
   I2CInit();
 
@@ -719,7 +782,7 @@ int main(void) {
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+2, Thread2, NULL); // ADXL
   chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO,   Thread3, NULL); // SPI
   chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO-5, Thread4, NULL); // Serial printer
-  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO-10, Thread5, NULL); // Serial event reader
+  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO-4, Thread5, NULL); // Serial event reader
 
   /* Enable external (button) interrupts */
   extStart(&EXTD1, &extcfg);
