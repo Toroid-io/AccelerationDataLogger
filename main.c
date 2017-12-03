@@ -764,21 +764,27 @@ static THD_FUNCTION(Thread4, arg) {
 	        //oldt = chVTGetSystemTimeX();
 
 	        print_memoryCounter = memoryCounter;
-	        /* We will block the SPI device while printing */
+		if (print_memoryCounter == 0) {
+			char * noDataMsg = "--NO DATA--";
+			uartAcquireBus(&UARTD1);
+			uartStartSend(&UARTD1, 11, noDataMsg);
+			uartReleaseBus(&UARTD1);
+		}
+	        /* We will block the SPI and UART devices while printing */
+		uartAcquireBus(&UARTD1);
 	        spiAcquireBus(&SPID1);
 	        spiStart(&SPID1, &ramSPI);
 	        spiSelect(&SPID1);
 	        spiSend(&SPID1, 4, readCommandAddress);
 	        while (print_memoryCounter > 0) {
 			spiReceive(&SPID1, 7, rxbuf);
-			uartAcquireBus(&UARTD1);
 			size_t msgSize = 7;
 			uartSendTimeout(&UARTD1, &msgSize, rxbuf, TIME_INFINITE);
-			uartReleaseBus(&UARTD1);
 			print_memoryCounter -= 7;
 	        }
 	        spiUnselect(&SPID1);
-	        spiReleaseBus(&SPID1);
+		spiReleaseBus(&SPID1);
+		uartReleaseBus(&UARTD1);
 	        //chprintf((BaseSequentialStream *)&SD2,
 	        //"\r\nPrinting finished in %lu ms\r\n",
 	        //(chVTGetSystemTimeX()-oldt)/10);k
