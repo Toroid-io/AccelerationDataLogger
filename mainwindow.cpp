@@ -1,4 +1,8 @@
 /* TODO
+ * Urgent
+ *
+ * Continuously check USB conection
+ *
  * Variable acceleration range (currently fixed)
  * Variable sample time (currently fixed)
  * Variable calibration and acquisition delay
@@ -6,6 +10,7 @@
 
 #include "mainwindow.h"
 #include "ui_mainwindow.h"
+#include "aboutme.h"
 
 #include <QLabel>
 #include <QLineEdit>
@@ -64,18 +69,24 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->saveBPushButton,
             &QPushButton::clicked, this,
             &MainWindow::saveDataButtonCB);
+    connect(ui->aboutAction,
+            &QAction::triggered, this,
+            &MainWindow::aboutActionCB);
+    connect(ui->closeAction,
+            &QAction::triggered, this,
+            &MainWindow::close);
 
-   ui->serialPortComboBox->setFocus();
+    ui->serialPortComboBox->setFocus();
 
-   /*
+    /*
    QCPPlotTitle *title = new QCPPlotTitle(plot,"Sensor A");
    ui->s1QCustomPlot->plotLayout()->addElement(0,0, title);
    */
 
-   fillConfigurationUI(false);
+    fillConfigurationUI(false);
 
-   isConnected = false;
-   state = IDLE;
+    isConnected = false;
+    state = IDLE;
 }
 
 void MainWindow::connectGetConfigButtonCB()
@@ -182,6 +193,12 @@ void MainWindow::saveDataButtonCB()
     ui->connectionTextBrowser->append(tr("%1 %2").arg("Datos guardados en ").arg(filename));
 }
 
+void MainWindow::aboutActionCB()
+{
+   aboutMe = new AboutMe();
+   aboutMe->show();
+}
+
 void MainWindow::answerHandler(const QByteArray &s)
 {
     uint8_t *glissant = (uint8_t *)s.constData();
@@ -204,6 +221,19 @@ void MainWindow::answerHandler(const QByteArray &s)
         break;
 
     case GET_DATA:
+        /* There is no data to be downloaded */
+        if (strcmp(s, "--NO DATA--") == 0) {
+            QMessageBox::information(
+                        this,
+                        tr("Acceleration Data Logger"),
+                        tr("No hay datos para descargar. Ha realizado la adquisición?") );
+            ui->getDataPushButton->setEnabled(true);
+            ui->connectGetConfPushButton->setEnabled(true);
+            ui->saveAPushButton->setEnabled(true);
+            ui->saveBPushButton->setEnabled(true);
+            break;
+        }
+
         ui->downloadProgressBar->setValue(100);
         ui->connectionTextBrowser->append("DOWNLOAD FINISHED");
 
@@ -265,6 +295,8 @@ void MainWindow::downloadHandler(int d)
 void MainWindow::errorHandler(const QString &s)
 {
     showError("ERROR", s);
+    isConnected = false;
+    fillConfigurationUI(false);
     state = IDLE;
     return;
 }
@@ -272,6 +304,8 @@ void MainWindow::errorHandler(const QString &s)
 void MainWindow::timeoutHandler(const QString &s)
 {
     showError("TIMEOUT", s);
+    isConnected = false;
+    fillConfigurationUI(false);
     state = IDLE;
     return;
 }
@@ -331,7 +365,7 @@ void MainWindow::fillConfigurationUI(bool enable)
 
 double MainWindow::totalTimeCalculate(unsigned int sampleSpeed)
 {
-    return totalSize/12/((double)sampleSpeed);
+    return totalSize/14/((double)sampleSpeed);
 }
 
 QString MainWindow::arrayPrint(int16_t *vector) {
@@ -388,6 +422,11 @@ void MainWindow::setupPlot(QCustomPlot *customPlot,
     // Allow user to drag axis ranges with mouse, zoom with mouse wheel and select graphs by clicking:
     customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
     customPlot->replot();
+}
+
+void   MainWindow::closeEvent(QCloseEvent*)
+{
+    qApp->quit();
 }
 
 MainWindow::~MainWindow()

@@ -31,12 +31,15 @@ SOURCES += \
         main.cpp \
         masterthread.cpp \
         qcustomplot.cpp \
-        mainwindow.cpp
+        mainwindow.cpp \
+    aboutme.cpp
 
 HEADERS += \
         masterthread.h \
         qcustomplot.h \
-        mainwindow.h
+        mainwindow.h \
+    aboutme.h
 
 FORMS += \
-        mainwindow.ui
+        mainwindow.ui \
+    aboutme.ui

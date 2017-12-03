@@ -4,6 +4,7 @@
 #include <QMainWindow>
 #include "masterthread.h"
 #include "qcustomplot.h"
+#include "aboutme.h"
 
 namespace Ui {
 class MainWindow;
@@ -17,10 +18,14 @@ public:
     explicit MainWindow(QWidget *parent = 0);
     ~MainWindow();
 
+protected:
+    void  closeEvent(QCloseEvent*);
+
 private slots:
     void connectGetConfigButtonCB();
     void getDataButtonCB();
     void saveDataButtonCB();
+    void aboutActionCB();
     void wThread(QString);
     void showError(QString error, QString s);
 
@@ -44,6 +49,7 @@ private:
     QString arrayPrint(int16_t *vector);
 
 private:
+    AboutMe *aboutMe = nullptr;
     const unsigned int totalSize = 128 * 1024;
     bool isConnected;
     MasterThread thread;
