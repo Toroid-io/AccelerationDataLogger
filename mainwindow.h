@@ -27,7 +27,6 @@ private slots:
     void saveDataButtonCB();
     void aboutActionCB();
     void wThread(QString);
-    void showError(QString error, QString s);
 
 private slots:
     /* used to communicate with masterthread */
@@ -37,8 +36,6 @@ private slots:
     void downloadHandler(int d);
 
 private:
-    Ui::MainWindow *ui;
-    enum STATES {IDLE, GET_HELLO_CONFIG, GET_DATA, SAVE_CONFIG} state;
     void setupPlot(QCustomPlot *customPlot,
                    QVector<double> &t,
                    QVector<double> &x,
@@ -47,9 +44,11 @@ private:
     void fillConfigurationUI(bool enable);
     double totalTimeCalculate(unsigned int sampleSpeed);
     QString arrayPrint(int16_t *vector);
+    void writeToConsole(QString type, QString msg);
 
 private:
-    AboutMe *aboutMe = nullptr;
+    Ui::MainWindow *ui;
+    enum STATES {IDLE, GET_HELLO_CONFIG, GET_DATA, SAVE_CONFIG} state;
     const unsigned int totalSize = 128 * 1024;
     bool isConnected;
     MasterThread thread;

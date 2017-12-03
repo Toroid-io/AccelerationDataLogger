@@ -92,7 +92,7 @@ MainWindow::MainWindow(QWidget *parent) :
 void MainWindow::connectGetConfigButtonCB()
 {
    if (state != IDLE) {
-       showError("NO IDLE", nullptr);
+       writeToConsole("ERROR", "No Idle State");
        return;
    }
    if (isConnected) {
@@ -111,7 +111,7 @@ void MainWindow::connectGetConfigButtonCB()
 void MainWindow::getDataButtonCB()
 {
    if (state != IDLE) {
-       showError("NO IDLE", nullptr);
+       writeToConsole("ERROR", "No Idle State");
        return;
    }
    /* Disable all buttons, these will be configured when the answer comes */
@@ -121,7 +121,7 @@ void MainWindow::getDataButtonCB()
    ui->saveBPushButton->setEnabled(false);
    ui->downloadProgressBar->setValue(0);
    wThread("r");
-   ui->connectionTextBrowser->append("START DOWNLOAD");
+   writeToConsole("INFO", "Start download");
    state = GET_DATA;
 }
 
@@ -190,12 +190,12 @@ void MainWindow::saveDataButtonCB()
         }
     }
 
-    ui->connectionTextBrowser->append(tr("%1 %2").arg("Datos guardados en ").arg(filename));
+    writeToConsole("INFO", tr("%1 %2").arg(filename).arg(" saved"));
 }
 
 void MainWindow::aboutActionCB()
 {
-   aboutMe = new AboutMe();
+   AboutMe *aboutMe = new AboutMe();
    aboutMe->show();
 }
 
@@ -217,6 +217,7 @@ void MainWindow::answerHandler(const QByteArray &s)
             return;
         /* We have a valid device, proceed */
         isConnected = true;
+        writeToConsole("INFO", "Connected");
         fillConfigurationUI(true);
         break;
 
@@ -235,7 +236,7 @@ void MainWindow::answerHandler(const QByteArray &s)
         }
 
         ui->downloadProgressBar->setValue(100);
-        ui->connectionTextBrowser->append("DOWNLOAD FINISHED");
+        writeToConsole("INFO", "Download finished");
 
         MPUt.clear();
         MPUx.clear();
@@ -294,7 +295,7 @@ void MainWindow::downloadHandler(int d)
 
 void MainWindow::errorHandler(const QString &s)
 {
-    showError("ERROR", s);
+    writeToConsole("ERROR", s);
     isConnected = false;
     fillConfigurationUI(false);
     state = IDLE;
@@ -303,7 +304,7 @@ void MainWindow::errorHandler(const QString &s)
 
 void MainWindow::timeoutHandler(const QString &s)
 {
-    showError("TIMEOUT", s);
+    writeToConsole("TIMEOUT", s);
     isConnected = false;
     fillConfigurationUI(false);
     state = IDLE;
@@ -312,21 +313,18 @@ void MainWindow::timeoutHandler(const QString &s)
 
 void MainWindow::wThread(QString command)
 {
-    QString ct = QTime::currentTime().toString();
     thread.transaction(ui->serialPortComboBox->currentText(),
                       30000, command);
-    ui->connectionTextBrowser->append(tr("H: %1 - %2")
-                                      .arg(ct)
-                                      .arg(command));
+    writeToConsole("SENT", command);
 }
 
-void MainWindow::showError(QString error, QString s)
+void MainWindow::writeToConsole(QString type, QString msg)
 {
     QString ct = QTime::currentTime().toString();
-    ui->connectionTextBrowser->append(tr("H: %1 - %2 %3")
+    ui->connectionTextBrowser->append(tr("H: %1 - %2 - %3")
                                       .arg(ct)
-                                      .arg(error)
-                                      .arg(s));
+                                      .arg(type)
+                                      .arg(msg));
 
 }
 
