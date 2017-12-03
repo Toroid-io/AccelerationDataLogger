@@ -76,9 +76,10 @@ void MasterThread::run()
             // read response
             if (serial.waitForReadyRead(currentWaitTimeout)) {
                 QByteArray responseData = serial.readAll();
-                while (serial.waitForReadyRead(100))
+                while (serial.waitForReadyRead(100)) {
                     responseData += serial.readAll();
-
+                    emit this->downloaded(responseData.size());
+                }
                 //QString response(responseData);
                 emit this->response(responseData);
             } else {

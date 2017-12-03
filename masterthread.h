@@ -70,6 +70,7 @@ signals:
     void response(const QByteArray &s);
     void error(const QString &s);
     void timeout(const QString &s);
+    void downloaded(const int d);
 
 private:
     QString portName;

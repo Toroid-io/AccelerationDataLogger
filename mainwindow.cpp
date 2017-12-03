@@ -47,6 +47,10 @@ MainWindow::MainWindow(QWidget *parent) :
             &MasterThread::timeout, this,
             &MainWindow::timeoutHandler);
 
+    connect(&thread,
+            &MasterThread::downloaded, this,
+            &MainWindow::downloadHandler);
+
     /* UI actions */
     connect(ui->connectGetConfPushButton,
             &QPushButton::clicked, this,
@@ -62,6 +66,11 @@ MainWindow::MainWindow(QWidget *parent) :
             &MainWindow::saveDataButtonCB);
 
    ui->serialPortComboBox->setFocus();
+
+   /*
+   QCPPlotTitle *title = new QCPPlotTitle(plot,"Sensor A");
+   ui->s1QCustomPlot->plotLayout()->addElement(0,0, title);
+   */
 
    fillConfigurationUI(false);
 
@@ -84,7 +93,7 @@ void MainWindow::connectGetConfigButtonCB()
         * Connection will be handled in answer callback
         */
        wThread("g");
-       state = GET_HELLO;
+       state = GET_HELLO_CONFIG;
    }
 }
 
@@ -99,6 +108,7 @@ void MainWindow::getDataButtonCB()
    ui->connectGetConfPushButton->setEnabled(false);
    ui->saveAPushButton->setEnabled(false);
    ui->saveBPushButton->setEnabled(false);
+   ui->downloadProgressBar->setValue(0);
    wThread("r");
    ui->connectionTextBrowser->append("START DOWNLOAD");
    state = GET_DATA;
@@ -183,7 +193,7 @@ void MainWindow::answerHandler(const QByteArray &s)
     long i;
 
     switch(state) {
-    case GET_HELLO:
+    case GET_HELLO_CONFIG:
         /* Copy device configuration to local structure and check magicNumber */
         memcpy(&configVariables, (struct configStructure *)glissant, sizeof(struct configStructure));
         if (configVariables.magicNumber != 0xADDA)
@@ -194,6 +204,7 @@ void MainWindow::answerHandler(const QByteArray &s)
         break;
 
     case GET_DATA:
+        ui->downloadProgressBar->setValue(100);
         ui->connectionTextBrowser->append("DOWNLOAD FINISHED");
 
         MPUt.clear();
@@ -237,13 +248,17 @@ void MainWindow::answerHandler(const QByteArray &s)
         ui->saveBPushButton->setEnabled(true);
         break;
 
-    case GET_CONFIG:
     case SAVE_CONFIG:
     case IDLE:
         break;
     }
     /* After handling the answer, we go idle */
     state = IDLE;
+}
+
+void MainWindow::downloadHandler(int d)
+{
+    ui->downloadProgressBar->setValue((int)((100*d)/(double)totalSize));
 }
 
 
@@ -289,6 +304,8 @@ void MainWindow::fillConfigurationUI(bool enable)
         ui->sampleTimeValLabel->setText(QString::number(totalTimeCalculate(configVariables.samplingSpeed)));
         ui->accelRangeValLabel->setText(QString::number(configVariables.accelerometerRange));
         ui->sampleSpeedValLabel->setText(QString::number(configVariables.samplingSpeed));
+        ui->offsetAValLabel->setText(arrayPrint(configVariables.calibrationMPU));
+        ui->offsetBValLabel->setText(arrayPrint(configVariables.calibrationADXL));
         ui->connectGetConfPushButton->setText("Desconectar");
     } else {
         ui->connectGetConfPushButton->setText("Conectar");
@@ -299,7 +316,10 @@ void MainWindow::fillConfigurationUI(bool enable)
     ui->sampleDelayValLabel->setEnabled(enable);
     ui->sampleSpeedValLabel->setEnabled(enable);
     ui->sampleTimeValLabel->setEnabled(enable);
+    ui->offsetAValLabel->setEnabled(enable);
+    ui->offsetBValLabel->setEnabled(enable);
 
+    ui->downloadProgressBar->setEnabled(enable);
     ui->getDataPushButton->setEnabled(enable);
     /* No save config in current version (view TODO) */
     /* ui->saveConfigPushButton->setEnabled(enable); */
@@ -311,8 +331,16 @@ void MainWindow::fillConfigurationUI(bool enable)
 
 double MainWindow::totalTimeCalculate(unsigned int sampleSpeed)
 {
-    return totalSamples/((double)sampleSpeed);
+    return totalSize/12/((double)sampleSpeed);
+}
 
+QString MainWindow::arrayPrint(int16_t *vector) {
+    QString tmp;
+    tmp = tr("[%1 %2 %3]")
+            .arg(QString::number(vector[0]))
+            .arg(QString::number(vector[1]))
+            .arg(QString::number(vector[2]));
+    return tmp;
 }
 
 void MainWindow::setupPlot(QCustomPlot *customPlot,
@@ -321,35 +349,45 @@ void MainWindow::setupPlot(QCustomPlot *customPlot,
                            QVector<double> &y,
                            QVector<double> &z)
 {
-  // add two new graphs and set their look:
-  customPlot->addGraph();
-  customPlot->graph(0)->setPen(QPen(Qt::blue)); // line color blue for first graph
-  //customPlot->graph(0)->setBrush(QBrush(QColor(0, 0, 255, 20))); // first graph will be filled with translucent blue
-  customPlot->addGraph();
-  customPlot->graph(1)->setPen(QPen(Qt::red)); // line color red for second graph
-  customPlot->addGraph();
-  customPlot->graph(2)->setPen(QPen(Qt::green)); // line color red for third graph
-  // configure right and top axis to show ticks but no labels:
-  // (see QCPAxisRect::setupFullAxesBox for a quicker method to do this)
-  customPlot->xAxis2->setVisible(true);
-  customPlot->xAxis2->setTickLabels(false);
-  customPlot->yAxis2->setVisible(true);
-  customPlot->yAxis2->setTickLabels(false);
-  // make left and bottom axes always transfer their ranges to right and top axes:
-  connect(customPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->xAxis2, SLOT(setRange(QCPRange)));
-  connect(customPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->yAxis2, SLOT(setRange(QCPRange)));
-  // pass data points to graphs:
-  customPlot->graph(0)->setData(t, x);
-  customPlot->graph(1)->setData(t, y);
-  customPlot->graph(2)->setData(t, z);
-  // let the ranges scale themselves so graph 0 fits perfectly in the visible area:
-  customPlot->graph(0)->rescaleAxes();
-  // same thing for graph 1, but only enlarge ranges (in case graph 1 is smaller than graph 0):
-  customPlot->graph(1)->rescaleAxes();
-  customPlot->graph(2)->rescaleAxes(true);
-  // Note: we could have also just called customPlot->rescaleAxes(); instead
-  // Allow user to drag axis ranges with mouse, zoom with mouse wheel and select graphs by clicking:
-  customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+    // add two new graphs and set their look:
+    customPlot->clearGraphs();
+    customPlot->legend->setVisible(true);
+    customPlot->addGraph();
+    customPlot->graph(0)->setPen(QPen(Qt::blue)); // line color blue for first graph
+    customPlot->graph(0)->setName("x");
+    //customPlot->graph(0)->setBrush(QBrush(QColor(0, 0, 255, 20))); // first graph will be filled with translucent blue
+    customPlot->addGraph();
+    customPlot->graph(1)->setPen(QPen(Qt::red)); // line color red for second graph
+    customPlot->graph(1)->setName("y");
+    customPlot->addGraph();
+    customPlot->graph(2)->setPen(QPen(Qt::green)); // line color red for third graph
+    customPlot->graph(2)->setName("z");
+    // add some legends
+    // configure right and top axis to show ticks but no labels:
+    // (see QCPAxisRect::setupFullAxesBox for a quicker method to do this)
+    customPlot->xAxis2->setVisible(true);
+    customPlot->xAxis2->setTickLabels(false);
+    customPlot->yAxis2->setVisible(true);
+    customPlot->yAxis2->setTickLabels(false);
+    // make left and bottom axes always transfer their ranges to right and top axes:
+    connect(customPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->xAxis2, SLOT(setRange(QCPRange)));
+    connect(customPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->yAxis2, SLOT(setRange(QCPRange)));
+    // set some labels
+    customPlot->xAxis->setLabel("Tiempo (s)");
+    customPlot->yAxis->setLabel("Aceleración (m/s²)");
+    // pass data points to graphs:
+    customPlot->graph(0)->setData(t, x);
+    customPlot->graph(1)->setData(t, y);
+    customPlot->graph(2)->setData(t, z);
+    // let the ranges scale themselves so graph 0 fits perfectly in the visible area:
+    customPlot->graph(0)->rescaleAxes();
+    // same thing for graph 1, but only enlarge ranges (in case graph 1 is smaller than graph 0):
+    customPlot->graph(1)->rescaleAxes();
+    customPlot->graph(2)->rescaleAxes();
+    // Note: we could have also just called customPlot->rescaleAxes(); instead
+    // Allow user to drag axis ranges with mouse, zoom with mouse wheel and select graphs by clicking:
+    customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+    customPlot->replot();
 }
 
 MainWindow::~MainWindow()

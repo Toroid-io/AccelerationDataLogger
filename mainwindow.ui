@@ -105,13 +105,6 @@
            </property>
           </widget>
          </item>
-         <item row="4" column="0">
-          <widget class="QLabel" name="accelRangeLabel">
-           <property name="text">
-            <string>Rango de Aceleración (+- m/s²)</string>
-           </property>
-          </widget>
-         </item>
          <item row="0" column="0">
           <widget class="QLabel" name="sampleSpeedLabel">
            <property name="text">
@@ -149,10 +142,51 @@
            </property>
           </widget>
          </item>
+         <item row="5" column="0">
+          <widget class="QLabel" name="offsetALabel">
+           <property name="text">
+            <string>Offset sensor A</string>
+           </property>
+          </widget>
+         </item>
+         <item row="4" column="0">
+          <widget class="QLabel" name="accelRangeLabel">
+           <property name="text">
+            <string>Rango de Aceleración (± m/s²)</string>
+           </property>
+          </widget>
+         </item>
          <item row="4" column="1">
           <widget class="QLabel" name="accelRangeValLabel">
            <property name="text">
             <string>0</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="0">
+          <widget class="QLabel" name="offsetBLabel">
+           <property name="text">
+            <string>Offset sensor B</string>
+           </property>
+          </widget>
+         </item>
+         <item row="5" column="1">
+          <widget class="QLabel" name="offsetAValLabel">
+           <property name="text">
+            <string>[0 0 0]</string>
+           </property>
+           <property name="alignment">
+            <set>Qt::AlignCenter</set>
+           </property>
+          </widget>
+         </item>
+         <item row="6" column="1">
+          <widget class="QLabel" name="offsetBValLabel">
+           <property name="text">
+            <string>[0 0 0]</string>
            </property>
            <property name="alignment">
             <set>Qt::AlignCenter</set>
@@ -175,6 +209,13 @@
         <widget class="QPushButton" name="getDataPushButton">
          <property name="text">
           <string>Descargar datos</string>
+         </property>
+        </widget>
+       </item>
+       <item>
+        <widget class="QProgressBar" name="downloadProgressBar">
+         <property name="value">
+          <number>0</number>
          </property>
         </widget>
        </item>
@@ -264,6 +305,20 @@
      <height>24</height>
     </rect>
    </property>
+   <widget class="QMenu" name="menuMenu">
+    <property name="title">
+     <string>Archi&amp;vo</string>
+    </property>
+    <addaction name="actionCerrar"/>
+   </widget>
+   <widget class="QMenu" name="menuAyuda">
+    <property name="title">
+     <string>Ayuda</string>
+    </property>
+    <addaction name="actionAcerca_2"/>
+   </widget>
+   <addaction name="menuMenu"/>
+   <addaction name="menuAyuda"/>
   </widget>
   <widget class="QToolBar" name="mainToolBar">
    <attribute name="toolBarArea">
@@ -274,6 +329,21 @@
    </attribute>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
+  <action name="actionAcerca">
+   <property name="text">
+    <string>Acerca</string>
+   </property>
+  </action>
+  <action name="actionCerrar">
+   <property name="text">
+    <string>Cerrar</string>
+   </property>
+  </action>
+  <action name="actionAcerca_2">
+   <property name="text">
+    <string>Acerca</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
  <customwidgets>

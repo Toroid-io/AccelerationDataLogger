@@ -29,10 +29,11 @@ private slots:
     void answerHandler(const QByteArray &s);
     void errorHandler(const QString &s);
     void timeoutHandler(const QString &s);
+    void downloadHandler(int d);
 
 private:
     Ui::MainWindow *ui;
-    enum STATES {IDLE, GET_HELLO, GET_DATA, GET_CONFIG, SAVE_CONFIG} state;
+    enum STATES {IDLE, GET_HELLO_CONFIG, GET_DATA, SAVE_CONFIG} state;
     void setupPlot(QCustomPlot *customPlot,
                    QVector<double> &t,
                    QVector<double> &x,
@@ -40,12 +41,10 @@ private:
                    QVector<double> &z);
     void fillConfigurationUI(bool enable);
     double totalTimeCalculate(unsigned int sampleSpeed);
+    QString arrayPrint(int16_t *vector);
 
 private:
-    /* totalSamples = 128 * 1024 / 14
-     * 14 is the number of bytes required for two sensors
-     */
-    const unsigned int totalSamples = 9362;
+    const unsigned int totalSize = 128 * 1024;
     bool isConnected;
     MasterThread thread;
     QVector<double> MPUt, MPUx, MPUy, MPUz;
