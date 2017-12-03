@@ -160,7 +160,7 @@
  * @brief   Enables the UART subsystem.
  */
 #if !defined(HAL_USE_UART) || defined(__DOXYGEN__)
-#define HAL_USE_UART                FALSE
+#define HAL_USE_UART                TRUE
 #endif
 
 /**
@@ -305,7 +305,7 @@
  *          buffers.
  */
 #if !defined(SERIAL_BUFFERS_SIZE) || defined(__DOXYGEN__)
-#define SERIAL_BUFFERS_SIZE         0x600
+#define SERIAL_BUFFERS_SIZE         0x100
 #endif
 
 /*===========================================================================*/
@@ -360,7 +360,7 @@
  * @note    Disabling this option saves both code and data space.
  */
 #if !defined(UART_USE_WAIT) || defined(__DOXYGEN__)
-#define UART_USE_WAIT               FALSE
+#define UART_USE_WAIT               TRUE
 #endif
 
 /**
@@ -368,7 +368,7 @@
  * @note    Disabling this option saves both code and data space.
  */
 #if !defined(UART_USE_MUTUAL_EXCLUSION) || defined(__DOXYGEN__)
-#define UART_USE_MUTUAL_EXCLUSION   FALSE
+#define UART_USE_MUTUAL_EXCLUSION   TRUE
 #endif
 
 /*===========================================================================*/

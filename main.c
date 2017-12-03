@@ -19,8 +19,8 @@ enum state {IDLE,
 	CALIBRATION,
 	START_ACQUISITION,
 	ACQUISITION,
-	START_PRINT,
-	PRINT} systemState;
+	PRINT_DATA,
+	PRINT_CONFIG} systemState;
 static MUTEX_DECL(systemState_mutex);
 
 struct configStructure systemConfig;
@@ -40,7 +40,7 @@ static MUTEX_DECL(memoryCounter_mutex);
 volatile int32_t memoryCounter;
 
 /* Various semaphores to synchronize stuff */
-static BSEMAPHORE_DECL(writeSerial, 1);
+static BSEMAPHORE_DECL(printMutex, 1);
 static threads_queue_t threadQueue;
 
 /* ADC variables used to test USB, Battery voltage, VRefInt, Temp */
@@ -85,6 +85,93 @@ static void gpt3cb(GPTDriver *gptp) {
 	chSysUnlockFromISR();
 }
 
+/*
+ * This callback is invoked when a transmission buffer has been completely
+ * read by the driver.
+ */
+static void txend1(UARTDriver *uartp) {
+  (void)uartp;
+  //palSetPad(GPIOC, GPIOC_LED4);
+}
+
+/*
+ * This callback is invoked when a transmission has physically completed.
+ */
+static void led3off(void *arg);
+static void txend2(UARTDriver *uartp) {
+  (void)uartp;
+  virtual_timer_t vt;
+  /*
+  palClearPad(GPIOB, GPIOB_LED_3);
+  chSysLockFromISR();
+  chVTResetI(&vt);
+  chVTSetI(&vt, MS2ST(200), led3off, NULL);
+  chSysUnlockFromISR();
+  */
+}
+
+/*
+ * This callback is invoked on a receive error, the errors mask is passed
+ * as parameter.
+ */
+static void rxerr(UARTDriver *uartp, uartflags_t e) {
+  (void)uartp;
+  (void)e;
+}
+
+/*
+ * This callback is invoked when a character is received but the application
+ * was not ready to receive it, the character is passed as parameter.
+ */
+static void rxchar(UARTDriver *uartp, uint16_t c) {
+  (void)uartp;
+  (void)c;
+  virtual_timer_t vt;
+  if (systemState != IDLE)
+	  return;
+  switch (c) {
+  case 'r':
+  case 'R':
+	  systemState = PRINT_DATA;
+	  chSysLockFromISR();
+	  chBSemSignalI(&printMutex);
+	  chSysUnlockFromISR();
+
+	  break;
+  case 'g':
+  case 'G':
+	  systemState = PRINT_CONFIG;
+	  chSysLockFromISR();
+	  chBSemSignalI(&printMutex);
+	  chSysUnlockFromISR();
+	  break;
+  default:
+	  break;
+
+  }
+  /* Flashing the LED each time a character is received.*/
+  /*
+  palClearPad(GPIOB, GPIOB_LED_3);
+  chSysLockFromISR();
+  chVTResetI(&vt);
+  chVTSetI(&vt, MS2ST(200), led3off, NULL);
+  chSysUnlockFromISR();
+  */
+}
+
+/*
+ * This callback is invoked when a receive buffer has been completely written.
+ */
+static void rxend(UARTDriver *uartp) {
+  (void)uartp;
+}
+
+/*
+ * This callback is invoked when configured timeout reached.
+ */
+static void rxtimeout(UARTDriver *uartp) {
+  (void)uartp;
+}
 /*===========================================================================*/
 /* Peripherals config structures                                             */
 /*===========================================================================*/
@@ -161,6 +248,20 @@ static const ADCConversionGroup adcgrpcfg = {
   ADC_CHSELR_CHSEL1 | ADC_CHSELR_CHSEL9
 };
 
+static UARTConfig uart_cfg_1 = {
+  txend1,
+  txend2,
+  rxend,
+  rxchar,
+  rxerr,
+  rxtimeout,
+  0,
+  115200,
+  0,
+  USART_CR2_LINEN,
+  0
+};
+
 /*===========================================================================*/
 /* Functions                                                                 */
 /*===========================================================================*/
@@ -177,6 +278,12 @@ static void led2off(void *arg) {
   (void)arg;
   palSetPad(GPIOC, GPIOC_LED_2);
 }
+
+static void led3off(void *arg) {
+  (void)arg;
+  palSetPad(GPIOB, GPIOB_LED_3);
+}
+
 
 static void blinkAllLeds(void){
   for (int i = 0; i < 2; ++i) {
@@ -264,9 +371,8 @@ static void calibrateSensors(void)
   systemConfig.calibrationADXL[2] = calibrationAccADXL[2] / 128;
 
   saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
+  //printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
 
-  /* We finished the calibration here*/
-  //chprintf((BaseSequentialStream *)&SD2,"Calibration finished\r\n");
 }
 
 void createMailboxes(void)
@@ -300,20 +406,20 @@ static void sensorStartup(void)
 	chThdSleepMilliseconds(100);
 	// verify connection
 	while (!MPU6050_testConnection()) {
-		//chprintf((BaseSequentialStream *)&SD2,"MPU FAIL\r\n");
+		chprintf((BaseSequentialStream *)&SD2,"MPU FAIL\r\n");
 		chThdSleepMilliseconds(1000);
 	}
-	//chprintf((BaseSequentialStream *)&SD2,"MPU OK\r\n");
+	chprintf((BaseSequentialStream *)&SD2,"MPU OK\r\n");
 
 	/* Initialize ADXL345 */
 	ADXL345_initialize();
 	chThdSleepMilliseconds(100);
 	// verify connection
 	while (!ADXL345_testConnection()) {
-		//chprintf((BaseSequentialStream *)&SD2,"ADXL FAIL\r\n");
+		chprintf((BaseSequentialStream *)&SD2,"ADXL FAIL\r\n");
 		chThdSleepMilliseconds(1000);
 	}
-	//chprintf((BaseSequentialStream *)&SD2,"ADXL OK\r\n");
+	chprintf((BaseSequentialStream *)&SD2,"ADXL OK\r\n");
 }
 
 void getVoltages(uint16_t *vusb, uint16_t *vbat)
@@ -337,7 +443,7 @@ void getVoltages(uint16_t *vusb, uint16_t *vbat)
 	*vusb = (uint16_t)usbtmp;
 	*vbat = (uint16_t)battmp;
 
-	//chprintf((BaseSequentialStream *)&SD2,"USB: %u - BAT: %u\r\n",
+	////chprintf((BaseSequentialStream *)&SD2,"USB: %u - BAT: %u\r\n",
 	//	 *vusb, *vbat);
 	return;
 }
@@ -372,7 +478,7 @@ static THD_FUNCTION(Thread0, arg) {
 		default:
 			break;
 		case CALIBRATION:
-			//chprintf((BaseSequentialStream *)&SD2,"Calibration...\r\n");
+			chprintf((BaseSequentialStream *)&SD2,"Calibration...\r\n");
 			if (systemConfig.calibrationDelay > 0)
 				for (uint8_t i = 0; i < 10*systemConfig.calibrationDelay; i++) {
 					palClearPad(GPIOC, GPIOC_LED_2);
@@ -382,13 +488,13 @@ static THD_FUNCTION(Thread0, arg) {
 
 				}
 			calibrateSensors();
-			//chprintf((BaseSequentialStream *)&SD2,"Calibration DONE\r\n");
+			chprintf((BaseSequentialStream *)&SD2,"Calibration DONE\r\n");
 			chMtxLock(&systemState_mutex);
 			systemState = IDLE;
 			chMtxUnlock(&systemState_mutex);
 			break;
 		case START_ACQUISITION:
-			//chprintf((BaseSequentialStream *)&SD2,"Acquisition...\r\n");
+			chprintf((BaseSequentialStream *)&SD2,"Acquisition...\r\n");
 			if (systemConfig.acquisitionDelay > 0)
 				for (uint8_t i = 0; i < 10*systemConfig.acquisitionDelay; i++) {
 					palClearPad(GPIOC, GPIOC_LED_2);
@@ -412,15 +518,16 @@ static THD_FUNCTION(Thread0, arg) {
 			 * State changement will be done in the RAM write task
 			 */
 			break;
-		case START_PRINT:
-			chMtxLock(&systemState_mutex);
-			systemState = PRINT;
-			chMtxUnlock(&systemState_mutex);
-			chBSemSignal(&writeSerial);
-			break;
-		case PRINT:
+		case PRINT_DATA:
 			/* Nothing to do here
-			 * State changement will be done in the RAM write task
+			 * Mutex will be released in ISR callback
+			 * State will change in UART write task
+			 */
+			break;
+		case PRINT_CONFIG:
+			/* Nothing to do here
+			 * Mutex will be released in ISR callback
+			 * State will change in UART write task
 			 */
 			break;
 		}
@@ -441,7 +548,7 @@ static THD_FUNCTION(Thread1, arg) {
   int16_t ax, ay, az;
   int32_t axb, ayb, azb;
 
-  //chprintf((BaseSequentialStream *)&SD2,"MPU Thread\r\n");
+  chprintf((BaseSequentialStream *)&SD2,"MPU Thread\r\n");
 
   while (true) {
     /* wait until the timer starts */
@@ -505,7 +612,7 @@ static THD_FUNCTION(Thread2, arg) {
   int16_t ax, ay, az;
   int32_t axb, ayb, azb;
 
-  //chprintf((BaseSequentialStream *)&SD2,"ADXL Thread\r\n");
+  chprintf((BaseSequentialStream *)&SD2,"ADXL Thread\r\n");
 
   while (true) {
     /* wait until the timer says */
@@ -592,7 +699,7 @@ static THD_FUNCTION(Thread3, arg) {
 	      chMtxLock(&systemState_mutex);
 	      systemState = IDLE;
 	      chMtxUnlock(&systemState_mutex);
-	      //chprintf((BaseSequentialStream *)&SD2,"Acquisition DONE\r\n");
+	      chprintf((BaseSequentialStream *)&SD2,"Acquisition DONE\r\n");
 	      resetAllMailboxes();
 	      continue;
       }
@@ -628,7 +735,7 @@ static THD_FUNCTION(Thread3, arg) {
 static THD_WORKING_AREA(waThread4, 0x200);
 static THD_FUNCTION(Thread4, arg) {
   (void)arg;
-  chRegSetThreadName("UART printer");
+  chRegSetThreadName("UART data printer");
 
   uint8_t rxbuf[8];
 
@@ -642,66 +749,48 @@ static THD_FUNCTION(Thread4, arg) {
   //systime_t oldt;
   while (true) {
 
-	  chBSemWait(&writeSerial);
-	  /* measure execution time */
-	  //oldt = chVTGetSystemTimeX();
+	chBSemWait(&printMutex);
 
-	  print_memoryCounter = memoryCounter;
-	  /* We will block the SPI device while printing */
-	  spiAcquireBus(&SPID1);              /* Acquire ownership of the bus.    */
-	  spiStart(&SPID1, &ramSPI);       /* Setup transfer parameters.       */
-	  spiSelect(&SPID1);                  /* Slave Select assertion.          */
-	  spiSend(&SPID1, 4, readCommandAddress);
-	  while (print_memoryCounter > 0) {
-		  spiReceive(&SPID1, 7, rxbuf);
-		  streamWrite((BaseSequentialStream *)&SD1, rxbuf, 7);
-		  print_memoryCounter -= 7;
-	  }
-	  spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
-	  spiReleaseBus(&SPID1);              /* Ownership release.               */
-	  //chprintf((BaseSequentialStream *)&SD2,"\r\nPrinting finished in %lu ms\r\n", (chVTGetSystemTimeX()-oldt)/10);
-	  chMtxLock(&systemState_mutex);
-	  systemState = IDLE;
-	  chMtxUnlock(&systemState_mutex);
-  }
-}
+	if (systemState == PRINT_CONFIG) {
+		uartAcquireBus(&UARTD1);
+		size_t structSize = sizeof(struct configStructure);
+		uartSendTimeout(&UARTD1, &structSize, &systemConfig, TIME_INFINITE);
+		uartReleaseBus(&UARTD1);
+	        chMtxLock(&systemState_mutex);
+	        systemState = IDLE;
+	        chMtxUnlock(&systemState_mutex);
+	} else if (systemState == PRINT_DATA) {
+	        /* measure execution time */
+	        //oldt = chVTGetSystemTimeX();
 
-static THD_WORKING_AREA(waThread5, 128);
-static THD_FUNCTION(Thread5, arg) {
-	(void)arg;
-	chRegSetThreadName("UART listener");
-	event_listener_t elSerData;
-	chEvtRegisterMaskWithFlags((event_source_t *)chnGetEventSource(&SD1),
-				   &elSerData,
-				   EVENT_MASK(1),
-				   CHN_INPUT_AVAILABLE);
-	while (true) {
-		chEvtWaitOne(EVENT_MASK(1));
-		chEvtGetAndClearFlags(&elSerData);
-		msg_t charbuf;
-		do {
-			charbuf = chnGetTimeout(&SD1, TIME_IMMEDIATE);
-			if ( charbuf != Q_TIMEOUT ) {
-				switch (charbuf) {
-				case 'r':
-				case 'R':
-					if (systemState == IDLE) {
-						chMtxLock(&systemState_mutex);
-						systemState = START_PRINT;
-						chMtxUnlock(&systemState_mutex);
-					}
-					break;
-				case 'g':
-				case 'G':
-					if (systemState == IDLE) {
-						printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD1, true);
-					}
-					break;
+	        print_memoryCounter = memoryCounter;
+	        /* We will block the SPI device while printing */
+	        spiAcquireBus(&SPID1);
+	        spiStart(&SPID1, &ramSPI);
+	        spiSelect(&SPID1);
+	        spiSend(&SPID1, 4, readCommandAddress);
+	        while (print_memoryCounter > 0) {
+			spiReceive(&SPID1, 7, rxbuf);
+			uartAcquireBus(&UARTD1);
+			size_t msgSize = 7;
+			uartSendTimeout(&UARTD1, &msgSize, rxbuf, TIME_INFINITE);
+			uartReleaseBus(&UARTD1);
+			print_memoryCounter -= 7;
+	        }
+	        spiUnselect(&SPID1);
+	        spiReleaseBus(&SPID1);
+	        //chprintf((BaseSequentialStream *)&SD2,
+	        //"\r\nPrinting finished in %lu ms\r\n",
+	        //(chVTGetSystemTimeX()-oldt)/10);k
+	        chMtxLock(&systemState_mutex);
+	        systemState = IDLE;
+	        chMtxUnlock(&systemState_mutex);
 
-				}
-			}
-		} while (charbuf != Q_TIMEOUT);
+	} else {
+	        osalSysHalt("Invalid state");
+
 	}
+  }
 }
 
 /*===========================================================================*/
@@ -719,15 +808,18 @@ int main(void) {
   halInit();
   chSysInit();
 
+   /* Activates the UART and SERIAL (debug) drivers */
+  SYSCFG->CFGR1 |= SYSCFG_CFGR1_USART1TX_DMA_RMP;
+  SYSCFG->CFGR1 |= SYSCFG_CFGR1_USART1RX_DMA_RMP;
+  uartStart(&UARTD1, &uart_cfg_1);
+  sdStart(&SD2, NULL);
 
-  /*
-   * Activates the serial driver 1 using the driver default configuration.
-   */
-  sdStart(&SD1, NULL);
-  //sdStart(&SD2, NULL);
+  uartAcquireBus(&UARTD1);
+  uartStartSend(&UARTD1, 13, "Starting...\r\n");
+  uartReleaseBus(&UARTD1);
 
-  //chprintf((BaseSequentialStream *)&SD2,"Starting...\r\n");
-  //chprintf((BaseSequentialStream *)&SD2, "SYSCLK=%u\r\n", STM32_SYSCLK);
+  chprintf((BaseSequentialStream *)&SD2,"Starting...\r\n");
+  chprintf((BaseSequentialStream *)&SD2, "SYSCLK=%u\r\n", STM32_SYSCLK);
 
   /*
    * Blink all the LEDs
@@ -743,11 +835,11 @@ int main(void) {
 
   /* Get and verify system config from EEPROM */
   while (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
-	  //chprintf((BaseSequentialStream *)&SD2,"Invalid config in EEPROM\r\n");
-	  //chprintf((BaseSequentialStream *)&SD2,"Writing a new one...\r\n");
+	  chprintf((BaseSequentialStream *)&SD2,"Invalid config in EEPROM\r\n");
+	  chprintf((BaseSequentialStream *)&SD2,"Writing a new one...\r\n");
 	  saveDefaultConfigEEPROM(&eepromSPI);
   }
-  //chprintf((BaseSequentialStream *)&SD2,"Good system config in EEPROM\r\n");
+  chprintf((BaseSequentialStream *)&SD2,"Good system config in EEPROM\r\n");
 
   /* Set some hardcoded defaults
    * FIXME
@@ -756,7 +848,7 @@ int main(void) {
   systemConfig.acquisitionDelay = 3;
   systemConfig.accelerometerRange = 4;
 
-  //printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
+  printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
 
   I2CInit();
 
@@ -782,7 +874,6 @@ int main(void) {
   chThdCreateStatic(waThread2, sizeof(waThread2), NORMALPRIO+2, Thread2, NULL); // ADXL
   chThdCreateStatic(waThread3, sizeof(waThread3), NORMALPRIO,   Thread3, NULL); // SPI
   chThdCreateStatic(waThread4, sizeof(waThread4), NORMALPRIO-5, Thread4, NULL); // Serial printer
-  chThdCreateStatic(waThread5, sizeof(waThread5), NORMALPRIO-4, Thread5, NULL); // Serial event reader
 
   /* Enable external (button) interrupts */
   extStart(&EXTD1, &extcfg);
