@@ -50,10 +50,16 @@ MainWindow::MainWindow(QWidget *parent) :
     /* UI actions */
     connect(ui->connectGetConfPushButton,
             &QPushButton::clicked, this,
-            &MainWindow::connectGetConfig);
+            &MainWindow::connectGetConfigButtonCB);
     connect(ui->getDataPushButton,
             &QPushButton::clicked, this,
-            &MainWindow::getData);
+            &MainWindow::getDataButtonCB);
+    connect(ui->saveAPushButton,
+            &QPushButton::clicked, this,
+            &MainWindow::saveDataButtonCB);
+    connect(ui->saveBPushButton,
+            &QPushButton::clicked, this,
+            &MainWindow::saveDataButtonCB);
 
    ui->serialPortComboBox->setFocus();
 
@@ -63,7 +69,7 @@ MainWindow::MainWindow(QWidget *parent) :
    state = IDLE;
 }
 
-void MainWindow::connectGetConfig()
+void MainWindow::connectGetConfigButtonCB()
 {
    if (state != IDLE) {
        showError("NO IDLE", nullptr);
@@ -82,93 +88,134 @@ void MainWindow::connectGetConfig()
    }
 }
 
-void MainWindow::getData()
+void MainWindow::getDataButtonCB()
 {
    if (state != IDLE) {
        showError("NO IDLE", nullptr);
        return;
    }
+   /* Disable all buttons, these will be configured when the answer comes */
+   ui->getDataPushButton->setEnabled(false);
+   ui->connectGetConfPushButton->setEnabled(false);
+   ui->saveAPushButton->setEnabled(false);
+   ui->saveBPushButton->setEnabled(false);
    wThread("r");
    ui->connectionTextBrowser->append("START DOWNLOAD");
    state = GET_DATA;
+}
 
+void MainWindow::saveDataButtonCB()
+{
+    char origin = '0';
+    QObject* obj = sender();
+
+    /* Get the button that called this function and check available data */
+    if (obj == ui->saveAPushButton) {
+        origin = 'A';
+        if (MPUt.size() == 0) {
+            QMessageBox::information(
+                        this,
+                        tr("Acceleration Data Logger"),
+                        tr("No hay datos en el sensor A. Ha realizado la descarga?") );
+            return;
+        }
+    }
+    else if (obj == ui->saveBPushButton) {
+        origin = 'B';
+        if (ADXLt.size() == 0) {
+            QMessageBox::information(
+                        this,
+                        tr("Acceleration Data Logger"),
+                        tr("No hay datos en el sensor B. Ha realizado la descarga?") );
+            return;
+        }
+
+    }
+
+    /* Open new file to write */
+    QString filename = QFileDialog::getSaveFileName(this, tr("Guardar archivo"),
+                                                    tr("%1/data-%2%3")
+                                                    .arg(QStandardPaths::standardLocations(QStandardPaths::DesktopLocation).last())
+                                                    .arg(origin)
+                                                    .arg(".csv"),
+                                                    tr("Data (*.csv *.txt)"));
+    if (filename == ""){
+        qDebug()<<"Nombre de archivo vacio";
+        return;
+    }
+
+    QFile file(filename);
+    if (!file.open(QIODevice::WriteOnly | QIODevice::Text)) {
+        QMessageBox::information(0, "error", file.errorString());
+        return;
+    }
+
+    QTextStream out(&file);
+
+    if (origin == 'A') {
+        for (int i = 0; i < MPUt.size(); i++) {
+             out << MPUt.at(i) << ","
+                 << MPUx.at(i) << ","
+                 << MPUy.at(i) << ","
+                 << MPUz.at(i) << "\n";
+        }
+    }
+    else if (origin == 'B') {
+        for (int i = 0; i < ADXLt.size(); i++) {
+             out << ADXLt.at(i) << ","
+                 << ADXLx.at(i) << ","
+                 << ADXLy.at(i) << ","
+                 << ADXLz.at(i) << "\n";
+        }
+    }
+
+    ui->connectionTextBrowser->append(tr("%1 %2").arg("Datos guardados en ").arg(filename));
 }
 
 void MainWindow::answerHandler(const QByteArray &s)
 {
-    QString ct = QTime::currentTime().toString();
-
     uint8_t *glissant = (uint8_t *)s.constData();
 
     unsigned char id;
     int16_t v1, v2, v3;
     uint8_t *v1p, *v2p, *v3p;
 
-    /*
-    QString filename = "/tmp/Data.txt";
-    QFile file(filename);
-    if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
-        return;
-    QTextStream out(&file);
-             out   << id << ": "
-                      << v1 << ":"
-                      << v2 << ": "
-                      << v3 << ";\n";
-                      */
-    QString sString(s);
-    QStringList strList;
-
     long i;
 
     switch(state) {
     case GET_HELLO:
-        strList = sString.split(QRegularExpression("\r\n"),QString::SkipEmptyParts);
-        configVariables.magicNumber = strList.at(0).toUInt(nullptr, 16);
-        configVariables.samplingSpeed = strList.at(1).toUInt(nullptr, 10);
-        configVariables.accelerometerRange = strList.at(2).toUInt(nullptr, 10);
-        // 3 -> calibrationMPU
-        // 4 -> calibrationADXL
-        configVariables.calibrationDelay = strList.at(5).toUInt(nullptr, 10);
-        configVariables.acquisitionDelay = strList.at(6).toUInt(nullptr, 10);
-
+        /* Copy device configuration to local structure and check magicNumber */
+        memcpy(&configVariables, (struct configStructure *)glissant, sizeof(struct configStructure));
         if (configVariables.magicNumber != 0xADDA)
             return;
-
-        /* Very dirty solution to avoid target locking */
-        QThread::msleep(200);
         /* We have a valid device, proceed */
         isConnected = true;
         fillConfigurationUI(true);
-
         break;
-    case GET_DATA:
 
+    case GET_DATA:
         ui->connectionTextBrowser->append("DOWNLOAD FINISHED");
 
         MPUt.clear();
         MPUx.clear();
         MPUy.clear();
         MPUz.clear();
-
         ADXLt.clear();
         ADXLx.clear();
         ADXLy.clear();
         ADXLz.clear();
 
         for ( i = 0; i*7 < s.size(); ++i) {
-
             id = *((unsigned char *) glissant);
+            /* The mapping cannot be done using a struct, because of alignment issues */
             v1p = glissant + 1;
             v2p = glissant + 3;
             v3p = glissant + 5;
-
             v1 = *((int16_t *)v1p);
             v2 = *((int16_t *)v2p);
             v3 = *((int16_t *)v3p);
 
-             glissant += 7;
-
-             if (id == 'M') {
+            if (id == 'M') {
                  MPUt.append(1/800. * i/2);
                  MPUx.append((double)v1/32768.*4);
                  MPUy.append((double)v2/32768.*4);
@@ -180,16 +227,22 @@ void MainWindow::answerHandler(const QByteArray &s)
                  ADXLy.append((double)v2);
                  ADXLz.append((double)v3);
              }
-
+             glissant += 7;
         }
         setupPlot(ui->s1QCustomPlot, MPUt, MPUx, MPUy, MPUz);
         setupPlot(ui->s2QCustomPlot, ADXLt, ADXLx, ADXLy, ADXLz);
+        ui->getDataPushButton->setEnabled(true);
+        ui->connectGetConfPushButton->setEnabled(true);
+        ui->saveAPushButton->setEnabled(true);
+        ui->saveBPushButton->setEnabled(true);
         break;
+
     case GET_CONFIG:
-    case IDLE:
     case SAVE_CONFIG:
+    case IDLE:
         break;
     }
+    /* After handling the answer, we go idle */
     state = IDLE;
 }
 
@@ -250,8 +303,8 @@ void MainWindow::fillConfigurationUI(bool enable)
     ui->getDataPushButton->setEnabled(enable);
     /* No save config in current version (view TODO) */
     /* ui->saveConfigPushButton->setEnabled(enable); */
-    ui->save1PushButton->setEnabled(enable);
-    ui->save2PushButton->setEnabled(enable);
+    ui->saveAPushButton->setEnabled(enable);
+    ui->saveBPushButton->setEnabled(enable);
 
     ui->serialPortComboBox->setEnabled(!enable);
 }

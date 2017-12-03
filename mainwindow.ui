@@ -181,14 +181,14 @@
        <item>
         <layout class="QHBoxLayout" name="horizontalLayout">
          <item>
-          <widget class="QPushButton" name="save2PushButton">
+          <widget class="QPushButton" name="saveAPushButton">
            <property name="text">
             <string>Guardar A</string>
            </property>
           </widget>
          </item>
          <item>
-          <widget class="QPushButton" name="save1PushButton">
+          <widget class="QPushButton" name="saveBPushButton">
            <property name="text">
             <string>Guardar B</string>
            </property>

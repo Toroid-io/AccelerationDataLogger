@@ -18,16 +18,17 @@ public:
     ~MainWindow();
 
 private slots:
-    void connectGetConfig();
-    void getData();
+    void connectGetConfigButtonCB();
+    void getDataButtonCB();
+    void saveDataButtonCB();
     void wThread(QString);
     void showError(QString error, QString s);
 
 private slots:
+    /* used to communicate with masterthread */
     void answerHandler(const QByteArray &s);
     void errorHandler(const QString &s);
     void timeoutHandler(const QString &s);
-
 
 private:
     Ui::MainWindow *ui;
@@ -49,14 +50,15 @@ private:
     MasterThread thread;
     QVector<double> MPUt, MPUx, MPUy, MPUz;
     QVector<double> ADXLt, ADXLx, ADXLy, ADXLz;
-    struct ConfigVariables {
-        int calibrationMPU[3];
-        int calibrationADXL[3];
-        unsigned int magicNumber;
-        unsigned int samplingSpeed;
-        unsigned int accelerometerRange;
-        unsigned int calibrationDelay;
-        unsigned int acquisitionDelay;
+    struct configStructure {
+        int16_t calibrationMPU[3];
+        int16_t calibrationADXL[3];
+        uint16_t magicNumber;
+        uint16_t samplingSpeed;
+        uint8_t accelerometerRange;
+        uint8_t calibrationDelay;
+        uint8_t acquisitionDelay;
+        bool gyroActivatedMPU;
     } configVariables;
 };
 
