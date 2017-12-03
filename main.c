@@ -100,14 +100,12 @@ static void txend1(UARTDriver *uartp) {
 static void led3off(void *arg);
 static void txend2(UARTDriver *uartp) {
   (void)uartp;
-  virtual_timer_t vt;
-  /*
+  static virtual_timer_t vt3;
   palClearPad(GPIOB, GPIOB_LED_3);
   chSysLockFromISR();
-  chVTResetI(&vt);
-  chVTSetI(&vt, MS2ST(200), led3off, NULL);
+  chVTResetI(&vt3);
+  chVTSetI(&vt3, US2ST(200), led3off, NULL);
   chSysUnlockFromISR();
-  */
 }
 
 /*
@@ -126,7 +124,6 @@ static void rxerr(UARTDriver *uartp, uartflags_t e) {
 static void rxchar(UARTDriver *uartp, uint16_t c) {
   (void)uartp;
   (void)c;
-  virtual_timer_t vt;
   if (systemState != IDLE)
 	  return;
   switch (c) {
@@ -149,14 +146,6 @@ static void rxchar(UARTDriver *uartp, uint16_t c) {
 	  break;
 
   }
-  /* Flashing the LED each time a character is received.*/
-  /*
-  palClearPad(GPIOB, GPIOB_LED_3);
-  chSysLockFromISR();
-  chVTResetI(&vt);
-  chVTSetI(&vt, MS2ST(200), led3off, NULL);
-  chSysUnlockFromISR();
-  */
 }
 
 /*
@@ -172,6 +161,7 @@ static void rxend(UARTDriver *uartp) {
 static void rxtimeout(UARTDriver *uartp) {
   (void)uartp;
 }
+
 /*===========================================================================*/
 /* Peripherals config structures                                             */
 /*===========================================================================*/
@@ -724,11 +714,10 @@ static THD_FUNCTION(Thread3, arg) {
 
     }
   }
-
 }
 
 /*
- * Write to serial thread.
+ * Write to UART thread.
  * This is activated after the last reading.
  * Fetches the content from the SPI RAM and prints to the serial console
  */
