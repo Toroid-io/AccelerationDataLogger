@@ -43,14 +43,16 @@ private:
                    QVector<double> &z);
     void fillConfigurationUI(bool enable);
     double totalTimeCalculate(unsigned int sampleSpeed);
-    QString arrayPrint(int16_t *vector);
+    QString arrayPrint(int16_t *vector, char sensor);
     void writeToConsole(QString type, QString msg);
 
 private:
     Ui::MainWindow *ui;
-    enum STATES {IDLE, GET_HELLO_CONFIG, GET_DATA, SAVE_CONFIG} state;
+    enum STATES {DISCONNECTED, CONNECTED_IDLE, GET_HELLO_CONFIG, GET_DATA, SAVE_CONFIG} state;
     const unsigned int totalSize = 128 * 1024;
-    bool isConnected;
+    const double gravity = 9.81;
+    const double MPUscaleFactor = 1/16384. * gravity;
+    const double ADXLscaleFactor =  1/256. * gravity;
     MasterThread thread;
     QVector<double> MPUt, MPUx, MPUy, MPUz;
     QVector<double> ADXLt, ADXLx, ADXLy, ADXLz;

@@ -63,10 +63,10 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->getDataPushButton,
             &QPushButton::clicked, this,
             &MainWindow::getDataButtonCB);
-    connect(ui->saveAPushButton,
+    connect(ui->saveMPUPushButton,
             &QPushButton::clicked, this,
             &MainWindow::saveDataButtonCB);
-    connect(ui->saveBPushButton,
+    connect(ui->saveADXLPushButton,
             &QPushButton::clicked, this,
             &MainWindow::saveDataButtonCB);
     connect(ui->aboutAction,
@@ -78,47 +78,39 @@ MainWindow::MainWindow(QWidget *parent) :
 
     ui->serialPortComboBox->setFocus();
 
-    /*
-   QCPPlotTitle *title = new QCPPlotTitle(plot,"Sensor A");
-   ui->s1QCustomPlot->plotLayout()->addElement(0,0, title);
-   */
-
     fillConfigurationUI(false);
 
-    isConnected = false;
-    state = IDLE;
+    state = DISCONNECTED;
 }
 
 void MainWindow::connectGetConfigButtonCB()
 {
-   if (state != IDLE) {
-       writeToConsole("ERROR", "No Idle State");
-       return;
-   }
-   if (isConnected) {
+   if (state == CONNECTED_IDLE) {
        /* Disconnect*/
-       isConnected = false;
+       state = DISCONNECTED;
        fillConfigurationUI(false);
-   } else {
+   } else if (state == DISCONNECTED) {
        /* Ask connection parameters
         * Connection will be handled in answer callback
         */
        wThread("g");
        state = GET_HELLO_CONFIG;
+   } else {
+        writeToConsole("ERROR", "State is not IDLE");
    }
 }
 
 void MainWindow::getDataButtonCB()
 {
-   if (state != IDLE) {
-       writeToConsole("ERROR", "No Idle State");
+   if (state != CONNECTED_IDLE) {
+       writeToConsole("ERROR", "State is not IDLE");
        return;
    }
    /* Disable all buttons, these will be configured when the answer comes */
    ui->getDataPushButton->setEnabled(false);
    ui->connectGetConfPushButton->setEnabled(false);
-   ui->saveAPushButton->setEnabled(false);
-   ui->saveBPushButton->setEnabled(false);
+   ui->saveMPUPushButton->setEnabled(false);
+   ui->saveADXLPushButton->setEnabled(false);
    ui->downloadProgressBar->setValue(0);
    wThread("r");
    writeToConsole("INFO", "Start download");
@@ -131,23 +123,23 @@ void MainWindow::saveDataButtonCB()
     QObject* obj = sender();
 
     /* Get the button that called this function and check available data */
-    if (obj == ui->saveAPushButton) {
-        origin = 'A';
+    if (obj == ui->saveMPUPushButton) {
+        origin = 'M';
         if (MPUt.size() == 0) {
             QMessageBox::information(
                         this,
                         tr("Acceleration Data Logger"),
-                        tr("No hay datos en el sensor A. Ha realizado la descarga?") );
+                        tr("No hay datos en el sensor MPU. Ha realizado la descarga?") );
             return;
         }
     }
-    else if (obj == ui->saveBPushButton) {
-        origin = 'B';
+    else if (obj == ui->saveADXLPushButton) {
+        origin = 'A';
         if (ADXLt.size() == 0) {
             QMessageBox::information(
                         this,
                         tr("Acceleration Data Logger"),
-                        tr("No hay datos en el sensor B. Ha realizado la descarga?") );
+                        tr("No hay datos en el sensor ADXL. Ha realizado la descarga?") );
             return;
         }
 
@@ -173,7 +165,7 @@ void MainWindow::saveDataButtonCB()
 
     QTextStream out(&file);
 
-    if (origin == 'A') {
+    if (origin == 'M') {
         for (int i = 0; i < MPUt.size(); i++) {
              out << MPUt.at(i) << ","
                  << MPUx.at(i) << ","
@@ -181,7 +173,7 @@ void MainWindow::saveDataButtonCB()
                  << MPUz.at(i) << "\n";
         }
     }
-    else if (origin == 'B') {
+    else if (origin == 'A') {
         for (int i = 0; i < ADXLt.size(); i++) {
              out << ADXLt.at(i) << ","
                  << ADXLx.at(i) << ","
@@ -213,10 +205,11 @@ void MainWindow::answerHandler(const QByteArray &s)
     case GET_HELLO_CONFIG:
         /* Copy device configuration to local structure and check magicNumber */
         memcpy(&configVariables, (struct configStructure *)glissant, sizeof(struct configStructure));
-        if (configVariables.magicNumber != 0xADDA)
+        if (configVariables.magicNumber != 0xADDA) {
+            state = DISCONNECTED;
             return;
+        }
         /* We have a valid device, proceed */
-        isConnected = true;
         writeToConsole("INFO", "Connected");
         fillConfigurationUI(true);
         break;
@@ -230,8 +223,8 @@ void MainWindow::answerHandler(const QByteArray &s)
                         tr("No hay datos para descargar. Ha realizado la adquisición?") );
             ui->getDataPushButton->setEnabled(true);
             ui->connectGetConfPushButton->setEnabled(true);
-            ui->saveAPushButton->setEnabled(true);
-            ui->saveBPushButton->setEnabled(true);
+            ui->saveMPUPushButton->setEnabled(true);
+            ui->saveADXLPushButton->setEnabled(true);
             break;
         }
 
@@ -258,16 +251,16 @@ void MainWindow::answerHandler(const QByteArray &s)
             v3 = *((int16_t *)v3p);
 
             if (id == 'M') {
-                 MPUt.append(1/800. * i/2);
-                 MPUx.append((double)v1/32768.*4);
-                 MPUy.append((double)v2/32768.*4);
-                 MPUz.append((double)v3/32768.*4);
+                MPUt.append(1/800. * i/2);
+                MPUx.append((double)v1 * MPUscaleFactor);
+                MPUy.append((double)v2 * MPUscaleFactor);
+                MPUz.append((double)v3 * MPUscaleFactor);
              }
              if (id == 'A') {
                  ADXLt.append(1/800. * i/2);
-                 ADXLx.append((double)v1);
-                 ADXLy.append((double)v2);
-                 ADXLz.append((double)v3);
+                 ADXLx.append((double)v1 * ADXLscaleFactor);
+                 ADXLy.append((double)v2 * ADXLscaleFactor);
+                 ADXLz.append((double)v3 * ADXLscaleFactor);
              }
              glissant += 7;
         }
@@ -275,16 +268,17 @@ void MainWindow::answerHandler(const QByteArray &s)
         setupPlot(ui->s2QCustomPlot, ADXLt, ADXLx, ADXLy, ADXLz);
         ui->getDataPushButton->setEnabled(true);
         ui->connectGetConfPushButton->setEnabled(true);
-        ui->saveAPushButton->setEnabled(true);
-        ui->saveBPushButton->setEnabled(true);
+        ui->saveMPUPushButton->setEnabled(true);
+        ui->saveADXLPushButton->setEnabled(true);
         break;
 
     case SAVE_CONFIG:
-    case IDLE:
+    case CONNECTED_IDLE:
+    case DISCONNECTED:
         break;
     }
     /* After handling the answer, we go idle */
-    state = IDLE;
+    state = CONNECTED_IDLE;
 }
 
 void MainWindow::downloadHandler(int d)
@@ -296,25 +290,23 @@ void MainWindow::downloadHandler(int d)
 void MainWindow::errorHandler(const QString &s)
 {
     writeToConsole("ERROR", s);
-    isConnected = false;
     fillConfigurationUI(false);
-    state = IDLE;
+    state = DISCONNECTED;
     return;
 }
 
 void MainWindow::timeoutHandler(const QString &s)
 {
     writeToConsole("TIMEOUT", s);
-    isConnected = false;
     fillConfigurationUI(false);
-    state = IDLE;
+    state = DISCONNECTED;
     return;
 }
 
 void MainWindow::wThread(QString command)
 {
     thread.transaction(ui->serialPortComboBox->currentText(),
-                      30000, command);
+                      1000, command);
     writeToConsole("SENT", command);
 }
 
@@ -336,8 +328,8 @@ void MainWindow::fillConfigurationUI(bool enable)
         ui->sampleTimeValLabel->setText(QString::number(totalTimeCalculate(configVariables.samplingSpeed)));
         ui->accelRangeValLabel->setText(QString::number(configVariables.accelerometerRange));
         ui->sampleSpeedValLabel->setText(QString::number(configVariables.samplingSpeed));
-        ui->offsetAValLabel->setText(arrayPrint(configVariables.calibrationMPU));
-        ui->offsetBValLabel->setText(arrayPrint(configVariables.calibrationADXL));
+        ui->offsetMPUValLabel->setText(arrayPrint(configVariables.calibrationMPU, 'M'));
+        ui->offsetADXLValLabel->setText(arrayPrint(configVariables.calibrationADXL, 'A'));
         ui->connectGetConfPushButton->setText("Desconectar");
     } else {
         ui->connectGetConfPushButton->setText("Conectar");
@@ -348,15 +340,16 @@ void MainWindow::fillConfigurationUI(bool enable)
     ui->sampleDelayValLabel->setEnabled(enable);
     ui->sampleSpeedValLabel->setEnabled(enable);
     ui->sampleTimeValLabel->setEnabled(enable);
-    ui->offsetAValLabel->setEnabled(enable);
-    ui->offsetBValLabel->setEnabled(enable);
+    ui->offsetMPUValLabel->setEnabled(enable);
+    ui->offsetADXLValLabel->setEnabled(enable);
 
     ui->downloadProgressBar->setEnabled(enable);
+    ui->downloadProgressBar->setValue(0);
     ui->getDataPushButton->setEnabled(enable);
     /* No save config in current version (view TODO) */
     /* ui->saveConfigPushButton->setEnabled(enable); */
-    ui->saveAPushButton->setEnabled(enable);
-    ui->saveBPushButton->setEnabled(enable);
+    ui->saveMPUPushButton->setEnabled(enable);
+    ui->saveADXLPushButton->setEnabled(enable);
 
     ui->serialPortComboBox->setEnabled(!enable);
 }
@@ -366,12 +359,18 @@ double MainWindow::totalTimeCalculate(unsigned int sampleSpeed)
     return totalSize/14/((double)sampleSpeed);
 }
 
-QString MainWindow::arrayPrint(int16_t *vector) {
+QString MainWindow::arrayPrint(int16_t *vector, char sensor) {
     QString tmp;
-    tmp = tr("[%1 %2 %3]")
-            .arg(QString::number(vector[0]))
-            .arg(QString::number(vector[1]))
-            .arg(QString::number(vector[2]));
+    if (sensor == 'M')
+        tmp = tr("[%1 %2 %3]")
+                .arg(QString::number(vector[0] * MPUscaleFactor, 'g', 3))
+                .arg(QString::number(vector[1] * MPUscaleFactor, 'g', 3))
+                .arg(QString::number(vector[2] * MPUscaleFactor, 'g', 3));
+    else if (sensor == 'A')
+        tmp = tr("[%1 %2 %3]")
+                .arg(QString::number(vector[0] * ADXLscaleFactor, 'g', 3))
+                .arg(QString::number(vector[1] * ADXLscaleFactor, 'g', 3))
+                .arg(QString::number(vector[2] * ADXLscaleFactor, 'g', 3));
     return tmp;
 }
 
@@ -411,11 +410,8 @@ void MainWindow::setupPlot(QCustomPlot *customPlot,
     customPlot->graph(0)->setData(t, x);
     customPlot->graph(1)->setData(t, y);
     customPlot->graph(2)->setData(t, z);
-    // let the ranges scale themselves so graph 0 fits perfectly in the visible area:
-    customPlot->graph(0)->rescaleAxes();
-    // same thing for graph 1, but only enlarge ranges (in case graph 1 is smaller than graph 0):
-    customPlot->graph(1)->rescaleAxes();
-    customPlot->graph(2)->rescaleAxes();
+    customPlot->yAxis->setRange(-3 * 9.81, 3 * 9.81);
+    customPlot->xAxis->setRange(0, totalTimeCalculate(configVariables.samplingSpeed));
     // Note: we could have also just called customPlot->rescaleAxes(); instead
     // Allow user to drag axis ranges with mouse, zoom with mouse wheel and select graphs by clicking:
     customPlot->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);

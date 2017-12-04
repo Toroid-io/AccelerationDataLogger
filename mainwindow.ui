@@ -106,7 +106,7 @@
          </widget>
         </item>
         <item row="5" column="1">
-         <widget class="QLabel" name="offsetAValLabel">
+         <widget class="QLabel" name="offsetMPUValLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
             <horstretch>100</horstretch>
@@ -201,7 +201,7 @@
          </widget>
         </item>
         <item row="6" column="1">
-         <widget class="QLabel" name="offsetBValLabel">
+         <widget class="QLabel" name="offsetADXLValLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -249,7 +249,7 @@
          </widget>
         </item>
         <item row="5" column="0">
-         <widget class="QLabel" name="offsetALabel">
+         <widget class="QLabel" name="offsetMPULabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -257,7 +257,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Offset sensor A</string>
+           <string>Offset sensor MPU (m/s²)</string>
           </property>
          </widget>
         </item>
@@ -275,7 +275,7 @@
          </widget>
         </item>
         <item row="6" column="0">
-         <widget class="QLabel" name="offsetBLabel">
+         <widget class="QLabel" name="offsetADXLLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -283,7 +283,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Offset sensor B</string>
+           <string>Offset sensor ADXL (m/s²)</string>
           </property>
          </widget>
         </item>
@@ -357,7 +357,7 @@
       <item>
        <layout class="QHBoxLayout" name="horizontalLayout">
         <item>
-         <widget class="QPushButton" name="saveAPushButton">
+         <widget class="QPushButton" name="saveMPUPushButton">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -365,12 +365,12 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Guardar A</string>
+           <string>Guardar MPU</string>
           </property>
          </widget>
         </item>
         <item>
-         <widget class="QPushButton" name="saveBPushButton">
+         <widget class="QPushButton" name="saveADXLPushButton">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Minimum" vsizetype="Fixed">
             <horstretch>0</horstretch>
@@ -378,7 +378,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Guardar B</string>
+           <string>Guardar ADXL</string>
           </property>
          </widget>
         </item>
@@ -432,6 +432,19 @@
         </property>
        </widget>
       </item>
+      <item alignment="Qt::AlignHCenter">
+       <widget class="QLabel" name="sensorALabel">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Sensor MPU</string>
+        </property>
+       </widget>
+      </item>
       <item>
        <widget class="QCustomPlot" name="s2QCustomPlot" native="true">
         <property name="sizePolicy">
@@ -448,6 +461,19 @@
         </property>
         <property name="autoFillBackground">
          <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item alignment="Qt::AlignHCenter">
+       <widget class="QLabel" name="sensorBLabel">
+        <property name="sizePolicy">
+         <sizepolicy hsizetype="Preferred" vsizetype="Fixed">
+          <horstretch>0</horstretch>
+          <verstretch>0</verstretch>
+         </sizepolicy>
+        </property>
+        <property name="text">
+         <string>Sensor ADXL</string>
         </property>
        </widget>
       </item>
