@@ -841,7 +841,7 @@ int main(void) {
    */
   systemConfig.calibrationDelay = 3;
   systemConfig.acquisitionDelay = 3;
-  systemConfig.accelerometerRange = 4;
+  systemConfig.accelerometerRange = 2;
 
   printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
 
