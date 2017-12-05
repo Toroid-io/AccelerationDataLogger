@@ -36,10 +36,6 @@ MainWindow::MainWindow(QWidget *parent) :
     /* Close window shortcut */
     new QShortcut(QKeySequence(Qt::CTRL + Qt::Key_Q), this, SLOT(close()));
 
-    /* Set available ports in list */
-    const auto infos = QSerialPortInfo::availablePorts();
-    for (const QSerialPortInfo &info : infos)
-        ui->serialPortComboBox->addItem(info.portName());
 
     /* Serial thread callbacks */
     connect(&thread,
@@ -69,6 +65,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->saveADXLPushButton,
             &QPushButton::clicked, this,
             &MainWindow::saveDataButtonCB);
+    connect(ui->updatePushButton,
+            &QPushButton::clicked, this,
+            &MainWindow::updatePortCB);
     connect(ui->aboutAction,
             &QAction::triggered, this,
             &MainWindow::aboutActionCB);
@@ -76,19 +75,17 @@ MainWindow::MainWindow(QWidget *parent) :
             &QAction::triggered, this,
             &MainWindow::close);
 
+    goToDisconnectedState();
+
     ui->serialPortComboBox->setFocus();
 
-    fillConfigurationUI(false);
-
-    state = DISCONNECTED;
 }
 
 void MainWindow::connectGetConfigButtonCB()
 {
    if (state == CONNECTED_IDLE) {
        /* Disconnect*/
-       state = DISCONNECTED;
-       fillConfigurationUI(false);
+       goToDisconnectedState();
    } else if (state == DISCONNECTED) {
        /* Ask connection parameters
         * Connection will be handled in answer callback
@@ -185,6 +182,11 @@ void MainWindow::saveDataButtonCB()
     writeToConsole("INFO", tr("%1 %2").arg(filename).arg(" saved"));
 }
 
+void MainWindow::updatePortCB()
+{
+    goToDisconnectedState();
+}
+
 void MainWindow::aboutActionCB()
 {
    AboutMe *aboutMe = new AboutMe();
@@ -206,7 +208,7 @@ void MainWindow::answerHandler(const QByteArray &s)
         /* Copy device configuration to local structure and check magicNumber */
         memcpy(&configVariables, (struct configStructure *)glissant, sizeof(struct configStructure));
         if (configVariables.magicNumber != 0xADDA) {
-            state = DISCONNECTED;
+            goToDisconnectedState();
             return;
         }
         /* We have a valid device, proceed */
@@ -290,16 +292,14 @@ void MainWindow::downloadHandler(int d)
 void MainWindow::errorHandler(const QString &s)
 {
     writeToConsole("ERROR", s);
-    fillConfigurationUI(false);
-    state = DISCONNECTED;
+    goToDisconnectedState();
     return;
 }
 
 void MainWindow::timeoutHandler(const QString &s)
 {
     writeToConsole("TIMEOUT", s);
-    fillConfigurationUI(false);
-    state = DISCONNECTED;
+    goToDisconnectedState();
     return;
 }
 
@@ -318,6 +318,18 @@ void MainWindow::writeToConsole(QString type, QString msg)
                                       .arg(type)
                                       .arg(msg));
 
+}
+
+void MainWindow::goToDisconnectedState()
+{
+    /* Set available ports in list */
+    ui->serialPortComboBox->clear();
+    const auto infos = QSerialPortInfo::availablePorts();
+    for (const QSerialPortInfo &info : infos)
+        ui->serialPortComboBox->addItem(info.portName());
+
+    fillConfigurationUI(false);
+    state = DISCONNECTED;
 }
 
 void MainWindow::fillConfigurationUI(bool enable)
@@ -352,6 +364,7 @@ void MainWindow::fillConfigurationUI(bool enable)
     ui->saveADXLPushButton->setEnabled(enable);
 
     ui->serialPortComboBox->setEnabled(!enable);
+    ui->connectGetConfPushButton->setEnabled(!enable);
 }
 
 double MainWindow::totalTimeCalculate(unsigned int sampleSpeed)

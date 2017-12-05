@@ -26,6 +26,7 @@ private slots:
     void getDataButtonCB();
     void saveDataButtonCB();
     void aboutActionCB();
+    void updatePortCB();
     void wThread(QString);
 
 private slots:
@@ -42,6 +43,7 @@ private:
                    QVector<double> &y,
                    QVector<double> &z);
     void fillConfigurationUI(bool enable);
+    void goToDisconnectedState();
     double totalTimeCalculate(unsigned int sampleSpeed);
     QString arrayPrint(int16_t *vector, char sensor);
     void writeToConsole(QString type, QString msg);
