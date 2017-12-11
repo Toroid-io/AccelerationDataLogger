@@ -1,11 +1,7 @@
 /* TODO
- * Urgent
- *
  * Continuously check USB conection
  *
  * Variable acceleration range (currently fixed)
- * Variable sample time (currently fixed)
- * Variable calibration and acquisition delay
  */
 
 #include "mainwindow.h"
@@ -56,6 +52,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->connectGetConfPushButton,
             &QPushButton::clicked, this,
             &MainWindow::connectGetConfigButtonCB);
+    connect(ui->uploadConfigPushButton,
+            &QPushButton::clicked, this,
+            &MainWindow::uploadConfigButtonCB);
     connect(ui->getDataPushButton,
             &QPushButton::clicked, this,
             &MainWindow::getDataButtonCB);
@@ -74,6 +73,9 @@ MainWindow::MainWindow(QWidget *parent) :
     connect(ui->closeAction,
             &QAction::triggered, this,
             &MainWindow::close);
+    connect(ui->sampleRateComboBox,
+            &QComboBox::currentTextChanged, this,
+            &MainWindow::modifySampleRateCB);
 
     goToDisconnectedState();
 
@@ -90,11 +92,19 @@ void MainWindow::connectGetConfigButtonCB()
        /* Ask connection parameters
         * Connection will be handled in answer callback
         */
-       wThread("g");
+       wThreadStr("g");
        state = GET_HELLO_CONFIG;
    } else {
         writeToConsole("ERROR", "State is not IDLE");
    }
+}
+
+void MainWindow::uploadConfigButtonCB()
+{
+    if (state != CONNECTED_IDLE)
+        return;
+    wThreadStr("c");
+    state = SEND_UPLOAD_COMMAND;
 }
 
 void MainWindow::getDataButtonCB()
@@ -109,7 +119,7 @@ void MainWindow::getDataButtonCB()
    ui->saveMPUPushButton->setEnabled(false);
    ui->saveADXLPushButton->setEnabled(false);
    ui->downloadProgressBar->setValue(0);
-   wThread("r");
+   wThreadStr("r");
    writeToConsole("INFO", "Start download");
    state = GET_DATA;
 }
@@ -187,6 +197,12 @@ void MainWindow::updatePortCB()
     goToDisconnectedState();
 }
 
+void MainWindow::modifySampleRateCB()
+{
+    double totalTime = totalTimeCalculate(ui->sampleRateComboBox->currentText().toInt());
+    ui->sampleTimeValLabel->setText(QString::number(totalTime));
+}
+
 void MainWindow::aboutActionCB()
 {
    AboutMe *aboutMe = new AboutMe();
@@ -196,6 +212,8 @@ void MainWindow::aboutActionCB()
 void MainWindow::answerHandler(const QByteArray &s)
 {
     uint8_t *glissant = (uint8_t *)s.constData();
+    configStructure newConfigVariables;
+    QByteArray newConfigByteArray;
 
     unsigned char id;
     int16_t v1, v2, v3;
@@ -214,6 +232,7 @@ void MainWindow::answerHandler(const QByteArray &s)
         /* We have a valid device, proceed */
         writeToConsole("INFO", "Connected");
         fillConfigurationUI(true);
+        state = CONNECTED_IDLE;
         break;
 
     case GET_DATA:
@@ -272,15 +291,33 @@ void MainWindow::answerHandler(const QByteArray &s)
         ui->connectGetConfPushButton->setEnabled(true);
         ui->saveMPUPushButton->setEnabled(true);
         ui->saveADXLPushButton->setEnabled(true);
+        state = CONNECTED_IDLE;
         break;
 
-    case SAVE_CONFIG:
+    case SEND_UPLOAD_COMMAND:
+        memcpy(&newConfigVariables, &configVariables, sizeof(struct configStructure));
+        newConfigVariables.acquisitionDelay = (uint16_t)ui->sampleDelaySpinBox->value();
+        newConfigVariables.calibrationDelay = (uint16_t)ui->calibrationDelaySpinBox->value();
+        newConfigVariables.samplingSpeed = ui->sampleRateComboBox->currentText().toInt(nullptr);
+        newConfigByteArray.setRawData((const char *)&newConfigVariables, sizeof(struct configStructure));
+        wThreadBin(newConfigByteArray);
+        state = UPLOADING_CONFIG;
+        break;
+
+    case UPLOADING_CONFIG:
+        if (strcmp(s, "--Config OK--") != 0) {
+            break;
+        }
+        writeToConsole("INFO", "Configuration Uploaded");
+        memcpy(&configVariables, &newConfigVariables, sizeof(struct configStructure));
+        state = CONNECTED_IDLE;
+        break;
+
     case CONNECTED_IDLE:
     case DISCONNECTED:
         break;
     }
     /* After handling the answer, we go idle */
-    state = CONNECTED_IDLE;
 }
 
 void MainWindow::downloadHandler(int d)
@@ -303,11 +340,17 @@ void MainWindow::timeoutHandler(const QString &s)
     return;
 }
 
-void MainWindow::wThread(QString command)
+void MainWindow::wThreadStr(QString commandStr)
+{
+    QByteArray command = commandStr.toLocal8Bit();
+    wThreadBin(command);
+    writeToConsole("SENT", commandStr);
+}
+
+void MainWindow::wThreadBin(QByteArray commandBin)
 {
     thread.transaction(ui->serialPortComboBox->currentText(),
-                      1000, command);
-    writeToConsole("SENT", command);
+                      1000, commandBin);
 }
 
 void MainWindow::writeToConsole(QString type, QString msg)
@@ -335,36 +378,37 @@ void MainWindow::goToDisconnectedState()
 void MainWindow::fillConfigurationUI(bool enable)
 {
     if (enable) {
-        ui->calDelayValLabel->setText(QString::number(configVariables.calibrationDelay));
-        ui->sampleDelayValLabel->setText(QString::number(configVariables.acquisitionDelay));
+        ui->calibrationDelaySpinBox->setValue(configVariables.calibrationDelay);
+        ui->sampleDelaySpinBox->setValue(configVariables.acquisitionDelay);
         ui->sampleTimeValLabel->setText(QString::number(totalTimeCalculate(configVariables.samplingSpeed)));
         ui->accelRangeValLabel->setText(QString::number(configVariables.accelerometerRange));
-        ui->sampleSpeedValLabel->setText(QString::number(configVariables.samplingSpeed));
+        ui->sampleRateComboBox->setCurrentText(QString::number(configVariables.samplingSpeed));
         ui->offsetMPUValLabel->setText(arrayPrint(configVariables.calibrationMPU, 'M'));
         ui->offsetADXLValLabel->setText(arrayPrint(configVariables.calibrationADXL, 'A'));
-        ui->connectGetConfPushButton->setText("Desconectar");
+        ui->connectGetConfPushButton->setText("Disconnect");
     } else {
-        ui->connectGetConfPushButton->setText("Conectar");
+        ui->connectGetConfPushButton->setText("Connect");
     }
 
     ui->accelRangeValLabel->setEnabled(enable);
-    ui->calDelayValLabel->setEnabled(enable);
-    ui->sampleDelayValLabel->setEnabled(enable);
-    ui->sampleSpeedValLabel->setEnabled(enable);
+    ui->calibrationDelaySpinBox->setEnabled(enable);
+    ui->sampleDelaySpinBox->setEnabled(enable);
+    ui->sampleRateComboBox->setEnabled(enable);
+    ui->filterTypeComboBox->setEnabled(enable);
     ui->sampleTimeValLabel->setEnabled(enable);
     ui->offsetMPUValLabel->setEnabled(enable);
     ui->offsetADXLValLabel->setEnabled(enable);
+    ui->filterTypeLabel->setEnabled(enable);
 
     ui->downloadProgressBar->setEnabled(enable);
     ui->downloadProgressBar->setValue(0);
     ui->getDataPushButton->setEnabled(enable);
-    /* No save config in current version (view TODO) */
-    /* ui->saveConfigPushButton->setEnabled(enable); */
     ui->saveMPUPushButton->setEnabled(enable);
     ui->saveADXLPushButton->setEnabled(enable);
+    ui->uploadConfigPushButton->setEnabled(enable);
 
     ui->serialPortComboBox->setEnabled(!enable);
-    ui->connectGetConfPushButton->setEnabled(!enable);
+    ui->updatePushButton->setEnabled(!enable);
 }
 
 double MainWindow::totalTimeCalculate(unsigned int sampleSpeed)
@@ -417,8 +461,8 @@ void MainWindow::setupPlot(QCustomPlot *customPlot,
     connect(customPlot->xAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->xAxis2, SLOT(setRange(QCPRange)));
     connect(customPlot->yAxis, SIGNAL(rangeChanged(QCPRange)), customPlot->yAxis2, SLOT(setRange(QCPRange)));
     // set some labels
-    customPlot->xAxis->setLabel("Tiempo (s)");
-    customPlot->yAxis->setLabel("Aceleración (m/s²)");
+    customPlot->xAxis->setLabel("Time (s)");
+    customPlot->yAxis->setLabel("Acceleration (m/s²)");
     // pass data points to graphs:
     customPlot->graph(0)->setData(t, x);
     customPlot->graph(1)->setData(t, y);

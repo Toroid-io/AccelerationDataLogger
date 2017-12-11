@@ -56,7 +56,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Configuración</string>
+         <string>Configuration</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignCenter</set>
@@ -77,7 +77,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Puerto</string>
+           <string>Port</string>
           </property>
          </widget>
         </item>
@@ -100,7 +100,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Actualizar</string>
+           <string>Update</string>
           </property>
          </widget>
         </item>
@@ -111,8 +111,47 @@
         <property name="sizeConstraint">
          <enum>QLayout::SetFixedSize</enum>
         </property>
-        <item row="2" column="0">
-         <widget class="QLabel" name="calDelayLabel">
+        <item row="0" column="2">
+         <widget class="QComboBox" name="sampleRateComboBox">
+          <item>
+           <property name="text">
+            <string>800</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>625</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>400</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>200</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>100</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>50</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>25</string>
+           </property>
+          </item>
+         </widget>
+        </item>
+        <item row="5" column="0">
+         <widget class="QLabel" name="accelRangeLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -120,11 +159,75 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Delay de calibración (s)</string>
+           <string>Acceleration range (± m/s²)</string>
           </property>
          </widget>
         </item>
-        <item row="5" column="1" alignment="Qt::AlignHCenter">
+        <item row="7" column="0">
+         <widget class="QLabel" name="offsetADXLLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Offset ADXL (m/s²)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="0">
+         <widget class="QLabel" name="offsetMPULabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Offset MPU (m/s²)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="2">
+         <widget class="QLabel" name="accelRangeValLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>0</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QSpinBox" name="sampleDelaySpinBox"/>
+        </item>
+        <item row="1" column="2">
+         <widget class="QSpinBox" name="calibrationDelaySpinBox"/>
+        </item>
+        <item row="7" column="2">
+         <widget class="QLabel" name="offsetADXLValLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>[0 0 0]</string>
+          </property>
+          <property name="alignment">
+           <set>Qt::AlignCenter</set>
+          </property>
+         </widget>
+        </item>
+        <item row="6" column="2">
          <widget class="QLabel" name="offsetMPUValLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -140,19 +243,6 @@
           </property>
          </widget>
         </item>
-        <item row="3" column="0">
-         <widget class="QLabel" name="sampleDelayLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>Delay de muestreo (s)</string>
-          </property>
-         </widget>
-        </item>
         <item row="0" column="0">
          <widget class="QLabel" name="sampleSpeedLabel">
           <property name="sizePolicy">
@@ -162,12 +252,12 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Frec. de muestreo (Hz)</string>
+           <string>Sample rate (Hz)</string>
           </property>
          </widget>
         </item>
-        <item row="2" column="1" alignment="Qt::AlignHCenter">
-         <widget class="QLabel" name="calDelayValLabel">
+        <item row="4" column="0">
+         <widget class="QLabel" name="sampleTimeLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -175,14 +265,24 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>0</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
+           <string>Total sampling time (s)</string>
           </property>
          </widget>
         </item>
-        <item row="1" column="1" alignment="Qt::AlignHCenter">
+        <item row="2" column="0">
+         <widget class="QLabel" name="sampleDelayLabel">
+          <property name="sizePolicy">
+           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
+            <horstretch>0</horstretch>
+            <verstretch>0</verstretch>
+           </sizepolicy>
+          </property>
+          <property name="text">
+           <string>Sampling delay (s)</string>
+          </property>
+         </widget>
+        </item>
+        <item row="4" column="2">
          <widget class="QLabel" name="sampleTimeValLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
@@ -206,82 +306,8 @@
           </property>
          </widget>
         </item>
-        <item row="4" column="0">
-         <widget class="QLabel" name="accelRangeLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>Rango de Aceleración (± m/s²)</string>
-          </property>
-         </widget>
-        </item>
-        <item row="6" column="1" alignment="Qt::AlignHCenter">
-         <widget class="QLabel" name="offsetADXLValLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>[0 0 0]</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
-         </widget>
-        </item>
-        <item row="4" column="1" alignment="Qt::AlignHCenter">
-         <widget class="QLabel" name="accelRangeValLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>0</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
-         </widget>
-        </item>
-        <item row="3" column="1" alignment="Qt::AlignHCenter">
-         <widget class="QLabel" name="sampleDelayValLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>0</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
-         </widget>
-        </item>
-        <item row="5" column="0">
-         <widget class="QLabel" name="offsetMPULabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>Offset sensor MPU (m/s²)</string>
-          </property>
-         </widget>
-        </item>
         <item row="1" column="0">
-         <widget class="QLabel" name="sampleTimeLabel">
+         <widget class="QLabel" name="calDelayLabel">
           <property name="sizePolicy">
            <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
             <horstretch>0</horstretch>
@@ -289,37 +315,34 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Tiempo total de muestreo (s)</string>
+           <string>Calibration delay(s)</string>
           </property>
          </widget>
         </item>
-        <item row="6" column="0">
-         <widget class="QLabel" name="offsetADXLLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
+        <item row="3" column="0">
+         <widget class="QLabel" name="filterTypeLabel">
           <property name="text">
-           <string>Offset sensor ADXL (m/s²)</string>
+           <string>Filter type</string>
           </property>
          </widget>
         </item>
-        <item row="0" column="1" alignment="Qt::AlignHCenter">
-         <widget class="QLabel" name="sampleSpeedValLabel">
-          <property name="sizePolicy">
-           <sizepolicy hsizetype="Fixed" vsizetype="Preferred">
-            <horstretch>0</horstretch>
-            <verstretch>0</verstretch>
-           </sizepolicy>
-          </property>
-          <property name="text">
-           <string>0</string>
-          </property>
-          <property name="alignment">
-           <set>Qt::AlignCenter</set>
-          </property>
+        <item row="3" column="2">
+         <widget class="QComboBox" name="filterTypeComboBox">
+          <item>
+           <property name="text">
+            <string>No filter</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>Static offset</string>
+           </property>
+          </item>
+          <item>
+           <property name="text">
+            <string>High pass</string>
+           </property>
+          </item>
          </widget>
         </item>
        </layout>
@@ -343,7 +366,14 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Conectar</string>
+         <string>Connect</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="uploadConfigPushButton">
+        <property name="text">
+         <string>Upload configuration</string>
         </property>
        </widget>
       </item>
@@ -356,7 +386,7 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Descargar datos</string>
+         <string>Download data</string>
         </property>
        </widget>
       </item>
@@ -387,7 +417,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Guardar MPU</string>
+           <string>Save MPU data</string>
           </property>
          </widget>
         </item>
@@ -400,7 +430,7 @@
            </sizepolicy>
           </property>
           <property name="text">
-           <string>Guardar ADXL</string>
+           <string>Save ADXL data</string>
           </property>
          </widget>
         </item>
@@ -428,7 +458,7 @@
          </font>
         </property>
         <property name="text">
-         <string>Visualización</string>
+         <string>Preview</string>
         </property>
         <property name="alignment">
          <set>Qt::AlignCenter</set>
@@ -463,7 +493,7 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Sensor MPU</string>
+         <string>MPU6050</string>
         </property>
        </widget>
       </item>
@@ -495,7 +525,7 @@
          </sizepolicy>
         </property>
         <property name="text">
-         <string>Sensor ADXL</string>
+         <string>ADXL345</string>
         </property>
        </widget>
       </item>
@@ -514,7 +544,7 @@
    </property>
    <widget class="QMenu" name="fileMenu">
     <property name="title">
-     <string>Archi&amp;vo</string>
+     <string>Fi&amp;le</string>
     </property>
     <addaction name="aboutAction"/>
     <addaction name="closeAction"/>
@@ -529,12 +559,12 @@
   </action>
   <action name="closeAction">
    <property name="text">
-    <string>&amp;Cerrar</string>
+    <string>&amp;Close</string>
    </property>
   </action>
   <action name="aboutAction">
    <property name="text">
-    <string>&amp;Acerca</string>
+    <string>&amp;About</string>
    </property>
   </action>
  </widget>

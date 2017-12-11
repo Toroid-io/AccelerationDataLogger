@@ -23,11 +23,14 @@ protected:
 
 private slots:
     void connectGetConfigButtonCB();
+    void uploadConfigButtonCB();
     void getDataButtonCB();
     void saveDataButtonCB();
     void aboutActionCB();
     void updatePortCB();
-    void wThread(QString);
+    void modifySampleRateCB();
+    void wThreadStr(QString);
+    void wThreadBin(QByteArray);
 
 private slots:
     /* used to communicate with masterthread */
@@ -50,7 +53,12 @@ private:
 
 private:
     Ui::MainWindow *ui;
-    enum STATES {DISCONNECTED, CONNECTED_IDLE, GET_HELLO_CONFIG, GET_DATA, SAVE_CONFIG} state;
+    enum STATES {DISCONNECTED,
+                 CONNECTED_IDLE,
+                 GET_HELLO_CONFIG,
+                 GET_DATA,
+                 SEND_UPLOAD_COMMAND,
+                 UPLOADING_CONFIG} state;
     const unsigned int totalSize = 128 * 1024;
     const double gravity = 9.81;
     const double MPUscaleFactor = 1/16384. * gravity;

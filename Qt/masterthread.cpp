@@ -70,7 +70,7 @@ MasterThread::~MasterThread()
     wait();
 }
 
-void MasterThread::transaction(const QString &portName, int waitTimeout, const QString &request)
+void MasterThread::transaction(const QString &portName, int waitTimeout, const QByteArray &request)
 {
     QMutexLocker locker(&mutex);
     this->portName = portName;
@@ -94,7 +94,7 @@ void MasterThread::run()
     }
 
     int currentWaitTimeout = waitTimeout;
-    QString currentRequest = request;
+    QByteArray currentRequest = request;
     mutex.unlock();
     QSerialPort serial;
 
@@ -120,8 +120,7 @@ void MasterThread::run()
             }
         }
         // write request
-        QByteArray requestData = currentRequest.toLocal8Bit();
-        serial.write(requestData);
+        serial.write(currentRequest);
         if (serial.waitForBytesWritten(waitTimeout)) {
             // read response
             if (serial.waitForReadyRead(currentWaitTimeout)) {
