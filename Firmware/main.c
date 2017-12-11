@@ -1,7 +1,6 @@
 /* TODO
  * - Config variable sensors range (EEPROM config)
- * - Use UART for data transfer
- * - Acquisition program
+ * - Fix UART unhandled exception when system is not compiled with debug options
  */
 #include "ch.h"
 #include "hal.h"
@@ -26,7 +25,7 @@ enum state {IDLE,
 	PRINT_CONFIG} systemState;
 static MUTEX_DECL(systemState_mutex);
 
-struct configStructure systemConfig;
+struct configStructure sysConf;
 
 /* the mailboxes are used to send information into the spi thread */
 #define NUM_BUFFERS 4
@@ -37,6 +36,7 @@ static mailbox_t free_buffers;
 static msg_t filled_buffers_queue[NUM_BUFFERS];
 static mailbox_t filled_buffers;
 
+/* recvBuffer is used to store data coming from the UART (configs) */
 uint8_t recvBuffer[32];
 
 #define SPI_RAM_SIZE 128*1024
@@ -177,9 +177,9 @@ static void rxend(UARTDriver *uartp) {
 	  return;
   }
   chSysLockFromISR();
-  uartStartSendI(&UARTD1, 15, "--Config OK--");
+  uartStartSendI(&UARTD1, 13, "--Config OK--");
   chSysUnlockFromISR();
-  memcpy(&systemConfig, recvBuffer, sizeof(struct configStructure));
+  memcpy(&sysConf, recvBuffer, sizeof(struct configStructure));
   systemState = SAVE_CONFIG;
 }
 
@@ -329,7 +329,7 @@ static void blinkAllLeds(void){
 static void I2CInit(void)
 {
 	/*
-	 * Check if the I2C is clogged
+	 * Check if the I2C is clogged and send some SCK pulses to release it
 	 */
 
 	if (!palReadPad(GPIOB, GPIOB_I2C1_SDA)) {
@@ -388,16 +388,16 @@ static void calibrateSensors(void)
     chThdSleepMilliseconds(10);
   }
 
-  systemConfig.calibrationMPU[0] = calibrationAccMPU[0] / 128;
-  systemConfig.calibrationMPU[1] = calibrationAccMPU[1] / 128;
-  systemConfig.calibrationMPU[2] = calibrationAccMPU[2] / 128;
+  sysConf.calibrationMPU[0] = calibrationAccMPU[0] / 128;
+  sysConf.calibrationMPU[1] = calibrationAccMPU[1] / 128;
+  sysConf.calibrationMPU[2] = calibrationAccMPU[2] / 128;
 
-  systemConfig.calibrationADXL[0] = calibrationAccADXL[0] / 128;
-  systemConfig.calibrationADXL[1] = calibrationAccADXL[1] / 128;
-  systemConfig.calibrationADXL[2] = calibrationAccADXL[2] / 128;
+  sysConf.calibrationADXL[0] = calibrationAccADXL[0] / 128;
+  sysConf.calibrationADXL[1] = calibrationAccADXL[1] / 128;
+  sysConf.calibrationADXL[2] = calibrationAccADXL[2] / 128;
 
-  saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
-  //printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
+  saveSystemConfigEEPROM(&eepromSPI, &sysConf);
+  //printSystemConfig(&sysConf, (BaseSequentialStream *)&SD2, false);
 
 }
 
@@ -506,14 +506,13 @@ static THD_FUNCTION(Thread0, arg) {
 			break;
 		case CALIBRATION:
 			chprintf((BaseSequentialStream *)&SD2,"Calibration...\r\n");
-			if (systemConfig.calibrationDelay > 0)
-				for (uint8_t i = 0; i < 10*systemConfig.calibrationDelay; i++) {
-					palClearPad(GPIOC, GPIOC_LED_2);
-					chThdSleepMilliseconds(50);
-					palSetPad(GPIOC, GPIOC_LED_2);
-					chThdSleepMilliseconds(50);
+			for (uint8_t i = 0; i < 10*sysConf.calibrationDelay; i++) {
+				palClearPad(GPIOC, GPIOC_LED_2);
+				chThdSleepMilliseconds(50);
+				palSetPad(GPIOC, GPIOC_LED_2);
+				chThdSleepMilliseconds(50);
 
-				}
+			}
 			calibrateSensors();
 			chprintf((BaseSequentialStream *)&SD2,"Calibration DONE\r\n");
 			chMtxLock(&systemState_mutex);
@@ -522,14 +521,13 @@ static THD_FUNCTION(Thread0, arg) {
 			break;
 		case START_ACQUISITION:
 			chprintf((BaseSequentialStream *)&SD2,"Acquisition...\r\n");
-			if (systemConfig.acquisitionDelay > 0)
-				for (uint8_t i = 0; i < 10*systemConfig.acquisitionDelay; i++) {
-					palClearPad(GPIOC, GPIOC_LED_2);
-					chThdSleepMilliseconds(50);
-					palSetPad(GPIOC, GPIOC_LED_2);
-					chThdSleepMilliseconds(50);
+			for (uint8_t i = 0; i < 10*sysConf.acquisitionDelay; i++) {
+				palClearPad(GPIOC, GPIOC_LED_2);
+				chThdSleepMilliseconds(50);
+				palSetPad(GPIOC, GPIOC_LED_2);
+				chThdSleepMilliseconds(50);
 
-				}
+			}
 			chMtxLock(&memoryCounter_mutex);
 			memoryCounter = 0;
 			chMtxUnlock(&memoryCounter_mutex);
@@ -537,7 +535,7 @@ static THD_FUNCTION(Thread0, arg) {
 			systemState = ACQUISITION;
 			chMtxUnlock(&systemState_mutex);
 			/* Calculate the new timer period */
-			timerPeriod = 100000/systemConfig.samplingSpeed - 1;
+			timerPeriod = 100000/sysConf.samplingSpeed - 1;
 			chprintf((BaseSequentialStream *)&SD2,"Timer period %u\r\n", (uint16_t)timerPeriod);
 			/* Start the timer */
 			gptStartContinuous(&GPTD3, (uint16_t) timerPeriod);
@@ -554,8 +552,8 @@ static THD_FUNCTION(Thread0, arg) {
 			break;
 		case SAVE_CONFIG:
 			/* We have a new config, save it in the EEPROM */
-			saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
-			/* If we have valid data, discard it */
+			saveSystemConfigEEPROM(&eepromSPI, &sysConf);
+			/* Discard all measurements */
 			chMtxLock(&memoryCounter_mutex);
 			memoryCounter = 0;
 			chMtxUnlock(&memoryCounter_mutex);
@@ -603,9 +601,9 @@ static THD_FUNCTION(Thread1, arg) {
 
     MPU6050_getAcceleration(&ax, &ay, &az);
 
-    axb = ax - systemConfig.calibrationMPU[0];
-    ayb = ay - systemConfig.calibrationMPU[1];
-    azb = az - systemConfig.calibrationMPU[2];
+    axb = ax - sysConf.calibrationMPU[0];
+    ayb = ay - sysConf.calibrationMPU[1];
+    azb = az - sysConf.calibrationMPU[2];
 
     if (axb > INT16_MAX)
 	    ax = INT16_MAX;
@@ -668,9 +666,9 @@ static THD_FUNCTION(Thread2, arg) {
     ADXL345_getAcceleration(&ax, &ay, &az);
     modifyAxis(&ax, &ay, &az);
 
-    axb = ax - systemConfig.calibrationADXL[0];
-    ayb = ay - systemConfig.calibrationADXL[1];
-    azb = az - systemConfig.calibrationADXL[2];
+    axb = ax - sysConf.calibrationADXL[0];
+    ayb = ay - sysConf.calibrationADXL[1];
+    azb = az - sysConf.calibrationADXL[2];
 
     if (axb > INT16_MAX)
 	    ax = INT16_MAX;
@@ -795,7 +793,7 @@ static THD_FUNCTION(Thread4, arg) {
 	if (systemState == PRINT_CONFIG) {
 		uartAcquireBus(&UARTD1);
 		size_t structSize = sizeof(struct configStructure);
-		uartSendTimeout(&UARTD1, &structSize, &systemConfig, TIME_INFINITE);
+		uartSendTimeout(&UARTD1, &structSize, &sysConf, TIME_INFINITE);
 		uartReleaseBus(&UARTD1);
 	        chMtxLock(&systemState_mutex);
 	        systemState = IDLE;
@@ -881,14 +879,14 @@ int main(void) {
 	  goto low_voltage_handler;
 
   /* Get and verify system config from EEPROM */
-  while (restoreSystemConfigEEPROM(&eepromSPI, &systemConfig)) {
+  while (restoreSystemConfigEEPROM(&eepromSPI, &sysConf)) {
 	  chprintf((BaseSequentialStream *)&SD2,"Invalid config in EEPROM\r\n");
 	  chprintf((BaseSequentialStream *)&SD2,"Writing a new one...\r\n");
 	  saveDefaultConfigEEPROM(&eepromSPI);
   }
   chprintf((BaseSequentialStream *)&SD2,"Good system config in EEPROM\r\n");
 
-  printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
+  printSystemConfig(&sysConf, (BaseSequentialStream *)&SD2, false);
 
   I2CInit();
 
