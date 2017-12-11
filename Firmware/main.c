@@ -6,6 +6,7 @@
 #include "ch.h"
 #include "hal.h"
 #include "ChibiOS/os/hal/lib/streams/chprintf.h"
+#include <string.h>
 #include "MEMS/MPU6050.h"
 #include "MEMS/ADXL345.h"
 #include "EEPROM/StaticSystemConfig.h"
@@ -19,6 +20,8 @@ enum state {IDLE,
 	CALIBRATION,
 	START_ACQUISITION,
 	ACQUISITION,
+	DOWNLOAD_CONFIG,
+	SAVE_CONFIG,
 	PRINT_DATA,
 	PRINT_CONFIG} systemState;
 static MUTEX_DECL(systemState_mutex);
@@ -33,6 +36,8 @@ static msg_t free_buffers_queue[NUM_BUFFERS];
 static mailbox_t free_buffers;
 static msg_t filled_buffers_queue[NUM_BUFFERS];
 static mailbox_t filled_buffers;
+
+uint8_t recvBuffer[32];
 
 #define SPI_RAM_SIZE 128*1024
 /* Mutex used to analyze the amount of memory available */
@@ -133,13 +138,22 @@ static void rxchar(UARTDriver *uartp, uint16_t c) {
 	  chSysLockFromISR();
 	  chBSemSignalI(&printMutex);
 	  chSysUnlockFromISR();
-
 	  break;
   case 'g':
   case 'G':
 	  systemState = PRINT_CONFIG;
 	  chSysLockFromISR();
 	  chBSemSignalI(&printMutex);
+	  chSysUnlockFromISR();
+	  break;
+  case 'c':
+  case 'C':
+	  systemState = DOWNLOAD_CONFIG;
+	  chSysLockFromISR();
+	  uartStartSendI(&UARTD1, 15, "--Send Config--");
+	  uartStartReceiveI(&UARTD1,
+			    sizeof(struct configStructure),
+			    (void *)recvBuffer);
 	  chSysUnlockFromISR();
 	  break;
   default:
@@ -153,6 +167,20 @@ static void rxchar(UARTDriver *uartp, uint16_t c) {
  */
 static void rxend(UARTDriver *uartp) {
   (void)uartp;
+  if (systemState != DOWNLOAD_CONFIG)
+	  osalSysHalt("UART rx was not expected");
+  if(checkSystemConfig((struct configStructure *)recvBuffer)) {
+	  chSysLockFromISR();
+	  uartStartSendI(&UARTD1, 16, "--Config ERROR--");
+	  chSysUnlockFromISR();
+	  systemState = IDLE;
+	  return;
+  }
+  chSysLockFromISR();
+  uartStartSendI(&UARTD1, 15, "--Config OK--");
+  chSysUnlockFromISR();
+  memcpy(&systemConfig, recvBuffer, sizeof(struct configStructure));
+  systemState = SAVE_CONFIG;
 }
 
 /*
@@ -160,6 +188,14 @@ static void rxend(UARTDriver *uartp) {
  */
 static void rxtimeout(UARTDriver *uartp) {
   (void)uartp;
+  if (systemState != DOWNLOAD_CONFIG)
+	  /* We can get here because commands triggered this interrupt */
+	  return;
+  chSysLockFromISR();
+  uartStopReceiveI(&UARTD1);
+  uartStartSendI(&UARTD1, 18, "--Config TIMEOUT--");
+  chSysUnlockFromISR();
+  systemState = IDLE;
 }
 
 /*===========================================================================*/
@@ -245,10 +281,10 @@ static UARTConfig uart_cfg_1 = {
   rxchar,
   rxerr,
   rxtimeout,
-  0,
+  115200*3,
   115200,
-  0,
-  USART_CR2_LINEN,
+  USART_CR1_RTOIE,
+  USART_CR2_LINEN | USART_CR2_RTOEN,
   0
 };
 
@@ -507,6 +543,18 @@ static THD_FUNCTION(Thread0, arg) {
 			/* Nothing to do here
 			 * State changement will be done in the RAM write task
 			 */
+			break;
+		case DOWNLOAD_CONFIG:
+			/* Nothing to do here
+			 * State changement will be done in the UART callbacks
+			 */
+			break;
+		case SAVE_CONFIG:
+			/* We have a new config, save it in the EEPROM */
+			saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
+			chMtxLock(&systemState_mutex);
+			systemState = IDLE;
+			chMtxUnlock(&systemState_mutex);
 			break;
 		case PRINT_DATA:
 			/* Nothing to do here
@@ -835,13 +883,6 @@ int main(void) {
 	  saveDefaultConfigEEPROM(&eepromSPI);
   }
   chprintf((BaseSequentialStream *)&SD2,"Good system config in EEPROM\r\n");
-
-  /* Set some hardcoded defaults
-   * FIXME
-   */
-  systemConfig.calibrationDelay = 3;
-  systemConfig.acquisitionDelay = 3;
-  systemConfig.accelerometerRange = 2;
 
   printSystemConfig(&systemConfig, (BaseSequentialStream *)&SD2, false);
 

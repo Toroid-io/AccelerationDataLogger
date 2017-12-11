@@ -16,6 +16,8 @@ struct configStructure {
 	bool gyroActivatedMPU;
 };
 
+
+uint8_t checkSystemConfig(struct configStructure *sysConfig);
 uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
 				  struct configStructure *sysConfig);
 void saveSystemConfigEEPROM(const SPIConfig *spiConfig,

@@ -5,6 +5,14 @@
 #include "StaticSystemConfig.h"
 #include "SPI_25LC01.h"
 
+uint8_t checkSystemConfig(struct configStructure *sysConfig)
+{
+	if (sysConfig->magicNumber == VALID_MAGIC)
+		return 0;
+	else
+		return 1;
+}
+
 uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
 				  struct configStructure *sysConfig)
 {
@@ -13,11 +21,7 @@ uint8_t restoreSystemConfigEEPROM(const SPIConfig *spiConfig,
 			 0,
 			 sizeof(struct configStructure),
 			 (uint8_t *)sysConfig);
-	if (sysConfig->magicNumber != VALID_MAGIC)
-		return 1;
-	else
-		return 0;
-
+	return checkSystemConfig(sysConfig);
 }
 
 void saveSystemConfigEEPROM(const SPIConfig *spiConfig,
