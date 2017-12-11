@@ -498,6 +498,7 @@ uint8_t checkVoltageLevel(void)
 static THD_WORKING_AREA(waThread0, 0x200);
 static THD_FUNCTION(Thread0, arg) {
 	(void)arg;
+	uint32_t timerPeriod;
 	while (true) {
 		switch(systemState) {
 		case IDLE:
@@ -535,9 +536,11 @@ static THD_FUNCTION(Thread0, arg) {
 			chMtxLock(&systemState_mutex);
 			systemState = ACQUISITION;
 			chMtxUnlock(&systemState_mutex);
-
+			/* Calculate the new timer period */
+			timerPeriod = 100000/systemConfig.samplingSpeed - 1;
+			chprintf((BaseSequentialStream *)&SD2,"Timer period %u\r\n", (uint16_t)timerPeriod);
 			/* Start the timer */
-			gptStartContinuous(&GPTD3, 124); // Timer interrupt at 800Hz
+			gptStartContinuous(&GPTD3, (uint16_t) timerPeriod);
 			break;
 		case ACQUISITION:
 			/* Nothing to do here
@@ -552,6 +555,10 @@ static THD_FUNCTION(Thread0, arg) {
 		case SAVE_CONFIG:
 			/* We have a new config, save it in the EEPROM */
 			saveSystemConfigEEPROM(&eepromSPI, &systemConfig);
+			/* If we have valid data, discard it */
+			chMtxLock(&memoryCounter_mutex);
+			memoryCounter = 0;
+			chMtxUnlock(&memoryCounter_mutex);
 			chMtxLock(&systemState_mutex);
 			systemState = IDLE;
 			chMtxUnlock(&systemState_mutex);
@@ -716,9 +723,6 @@ static THD_FUNCTION(Thread3, arg) {
   writeCommandAddress[2] = 0;
   writeCommandAddress[3] = 0;
 
-  chMtxLock(&memoryCounter_mutex);
-  memoryCounter = 0;
-  chMtxUnlock(&memoryCounter_mutex);
   while (true) {
 
     void *pbuf;
