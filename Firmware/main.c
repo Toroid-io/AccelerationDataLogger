@@ -40,8 +40,10 @@ static mailbox_t filled_buffers;
 uint8_t recvBuffer[32];
 
 #define SPI_RAM_SIZE 128*1024
-/* Mutex used to analyze the amount of memory available */
-static MUTEX_DECL(memoryCounter_mutex);
+/* Amount of memory used in the SPI RAM */
+/* This variable does not need a mutex by design. Mutual exclusion is handled by
+ * systemState
+ */
 volatile int32_t memoryCounter;
 
 /* Various semaphores to synchronize stuff */
@@ -129,37 +131,34 @@ static void rxerr(UARTDriver *uartp, uartflags_t e) {
 static void rxchar(UARTDriver *uartp, uint16_t c) {
   (void)uartp;
   (void)c;
-  if (systemState != IDLE)
+  chSysLockFromISR();
+  if (systemState != IDLE) {
+	  chSysUnlockFromISR();
 	  return;
+  }
   switch (c) {
   case 'r':
   case 'R':
 	  systemState = PRINT_DATA;
-	  chSysLockFromISR();
 	  chBSemSignalI(&printMutex);
-	  chSysUnlockFromISR();
 	  break;
   case 'g':
   case 'G':
 	  systemState = PRINT_CONFIG;
-	  chSysLockFromISR();
 	  chBSemSignalI(&printMutex);
-	  chSysUnlockFromISR();
 	  break;
   case 'c':
   case 'C':
 	  systemState = DOWNLOAD_CONFIG;
-	  chSysLockFromISR();
 	  uartStartSendI(&UARTD1, 15, "--Send Config--");
 	  uartStartReceiveI(&UARTD1,
 			    sizeof(struct configStructure),
 			    (void *)recvBuffer);
-	  chSysUnlockFromISR();
 	  break;
   default:
 	  break;
-
   }
+  chSysUnlockFromISR();
 }
 
 /*
@@ -167,20 +166,18 @@ static void rxchar(UARTDriver *uartp, uint16_t c) {
  */
 static void rxend(UARTDriver *uartp) {
   (void)uartp;
+  chSysLockFromISR();
   if (systemState != DOWNLOAD_CONFIG)
 	  osalSysHalt("UART rx was not expected");
   if(checkSystemConfig((struct configStructure *)recvBuffer)) {
-	  chSysLockFromISR();
 	  uartStartSendI(&UARTD1, 16, "--Config ERROR--");
-	  chSysUnlockFromISR();
 	  systemState = IDLE;
-	  return;
+  } else {
+	  uartStartSendI(&UARTD1, 13, "--Config OK--");
+	  systemState = SAVE_CONFIG;
+	  memcpy(&sysConf, recvBuffer, sizeof(struct configStructure));
   }
-  chSysLockFromISR();
-  uartStartSendI(&UARTD1, 13, "--Config OK--");
   chSysUnlockFromISR();
-  memcpy(&sysConf, recvBuffer, sizeof(struct configStructure));
-  systemState = SAVE_CONFIG;
 }
 
 /*
@@ -188,14 +185,14 @@ static void rxend(UARTDriver *uartp) {
  */
 static void rxtimeout(UARTDriver *uartp) {
   (void)uartp;
-  if (systemState != DOWNLOAD_CONFIG)
-	  /* We can get here because commands triggered this interrupt */
-	  return;
   chSysLockFromISR();
-  uartStopReceiveI(&UARTD1);
-  uartStartSendI(&UARTD1, 18, "--Config TIMEOUT--");
+  /* We can get here because commands triggered this interrupt instead of data */
+  if (systemState == DOWNLOAD_CONFIG) {
+	  uartStopReceiveI(&UARTD1);
+	  uartStartSendI(&UARTD1, 18, "--Config TIMEOUT--");
+	  systemState = IDLE;
+  }
   chSysUnlockFromISR();
-  systemState = IDLE;
 }
 
 /*===========================================================================*/
@@ -525,6 +522,7 @@ static THD_FUNCTION(Thread0, arg) {
 	(void)arg;
 	uint32_t timerPeriod;
 	while (true) {
+		chMtxLock(&systemState_mutex);
 		switch(systemState) {
 		case IDLE:
 		default:
@@ -540,9 +538,7 @@ static THD_FUNCTION(Thread0, arg) {
 			}
 			calibrateSensors();
 			chprintf((BaseSequentialStream *)&SD2,"Calibration DONE\r\n");
-			chMtxLock(&systemState_mutex);
 			systemState = IDLE;
-			chMtxUnlock(&systemState_mutex);
 			break;
 		case START_ACQUISITION:
 			chprintf((BaseSequentialStream *)&SD2,"Acquisition...\r\n");
@@ -553,12 +549,8 @@ static THD_FUNCTION(Thread0, arg) {
 				chThdSleepMilliseconds(50);
 
 			}
-			chMtxLock(&memoryCounter_mutex);
 			memoryCounter = 0;
-			chMtxUnlock(&memoryCounter_mutex);
-			chMtxLock(&systemState_mutex);
 			systemState = ACQUISITION;
-			chMtxUnlock(&systemState_mutex);
 			/* Calculate the new timer period */
 			timerPeriod = 100000/sysConf.samplingSpeed - 1;
 			chprintf((BaseSequentialStream *)&SD2,"Timer period %u\r\n", (uint16_t)timerPeriod);
@@ -579,12 +571,8 @@ static THD_FUNCTION(Thread0, arg) {
 			/* We have a new config, save it in the EEPROM */
 			saveSystemConfigEEPROM(&eepromSPI, &sysConf);
 			/* Discard all measurements */
-			chMtxLock(&memoryCounter_mutex);
 			memoryCounter = 0;
-			chMtxUnlock(&memoryCounter_mutex);
-			chMtxLock(&systemState_mutex);
 			systemState = IDLE;
-			chMtxUnlock(&systemState_mutex);
 			break;
 		case PRINT_DATA:
 			/* Nothing to do here
@@ -599,6 +587,7 @@ static THD_FUNCTION(Thread0, arg) {
 			 */
 			break;
 		}
+		chMtxUnlock(&systemState_mutex);
 		chThdSleepMilliseconds(100);
 	}
 }
@@ -770,13 +759,10 @@ static THD_FUNCTION(Thread3, arg) {
       spiSend(&SPID1, 7, message);          /* Atomic transfer operations.      */
       spiUnselect(&SPID1);                /* Slave Select de-assertion.       */
       spiReleaseBus(&SPID1);              /* Ownership release.               */
-      chMtxLock(&memoryCounter_mutex);
       memoryCounter += 7;
-      chMtxUnlock(&memoryCounter_mutex);
 
       /* Returning the buffer to the free buffers pool.*/
       (void)chMBPost(&free_buffers, (msg_t)pbuf, TIME_INFINITE);
-
     }
   }
 }
@@ -804,15 +790,14 @@ static THD_FUNCTION(Thread4, arg) {
   while (true) {
 
 	chBSemWait(&printMutex);
+	chMtxLock(&systemState_mutex);
 
 	if (systemState == PRINT_CONFIG) {
 		uartAcquireBus(&UARTD1);
 		size_t structSize = sizeof(struct configStructure);
 		uartSendTimeout(&UARTD1, &structSize, &sysConf, TIME_INFINITE);
 		uartReleaseBus(&UARTD1);
-	        chMtxLock(&systemState_mutex);
 	        systemState = IDLE;
-	        chMtxUnlock(&systemState_mutex);
 	} else if (systemState == PRINT_DATA) {
 	        /* measure execution time */
 	        //oldt = chVTGetSystemTimeX();
@@ -842,14 +827,13 @@ static THD_FUNCTION(Thread4, arg) {
 	        //chprintf((BaseSequentialStream *)&SD2,
 	        //"\r\nPrinting finished in %lu ms\r\n",
 	        //(chVTGetSystemTimeX()-oldt)/10);k
-	        chMtxLock(&systemState_mutex);
 	        systemState = IDLE;
-	        chMtxUnlock(&systemState_mutex);
 
 	} else {
 	        osalSysHalt("Invalid state");
 
 	}
+	chMtxUnlock(&systemState_mutex);
   }
 }
 
