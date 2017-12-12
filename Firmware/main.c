@@ -300,14 +300,30 @@ void modifyAxis(int16_t *ax, int16_t *ay, int16_t *az)
 	*ay = -tmp;
 }
 
-void saturateInt16(int32_t *i32, int16_t *i16)
+void saturateInt16(int32_t *atmp, int16_t *acc)
 {
-	if (*i32 > INT16_MAX)
-		*i16 = INT16_MAX;
-	else if (*i32 < INT16_MIN)
-		*i16 = INT16_MIN;
-	else
-		*i16 = (int16_t)*i32;
+	for (uint8_t i = 0; i < 3; ++i) {
+		if (atmp[i] > INT16_MAX)
+			acc[i] = INT16_MAX;
+		else if (atmp[i] < INT16_MIN)
+			acc[i] = INT16_MIN;
+		else
+			acc[i] = (int16_t)atmp[i];
+	}
+}
+
+void exponentialFilter(int32_t *atmp, int32_t *g, int16_t *acc)
+{
+	/* Numerator and denominator values of the exponential filter */
+	/* The calculation of the numerator gives a filter time-constant of 75 ms */
+	int32_t num, den;
+	den = 1000;
+	num = (7500 * den) / (7500 + 100000 / sysConf.samplingSpeed);
+	for (uint8_t i = 0; i < 3; ++i) {
+	    g[i] = (g[i] * num + (den - num) * acc[i]) / den;
+	    atmp[i] = acc[i] - g[i];
+	}
+	saturateInt16(atmp, acc);
 }
 
 static void led2off(void *arg) {
@@ -598,8 +614,9 @@ static THD_FUNCTION(Thread1, arg) {
 
   chRegSetThreadName("MPU6050_Poll");
 
-  int16_t ax, ay, az;
-  int32_t axb, ayb, azb;
+  int16_t acc[3];
+  int32_t atmp[3];
+  int32_t g[3] = {0, 0, 0};
 
   chprintf((BaseSequentialStream *)&SD2,"MPU Thread\r\n");
 
@@ -609,22 +626,21 @@ static THD_FUNCTION(Thread1, arg) {
     chThdEnqueueTimeoutS(&threadQueue, TIME_INFINITE);
     chSysUnlock();
 
-    MPU6050_getAcceleration(&ax, &ay, &az);
+    MPU6050_getAcceleration(acc, acc + 1, acc + 2);
 
     switch(sysConf.filterType) {
-    case  'R':
+    case  0:
 	    /* Do nothing, send the accelerations as they are sampled */
 	    break;
-    case 'O':
-	    axb = ax - sysConf.calibrationMPU[0];
-	    ayb = ay - sysConf.calibrationMPU[1];
-	    azb = az - sysConf.calibrationMPU[2];
+    case 1:
+	    atmp[0] = acc[0] - sysConf.calibrationMPU[0];
+	    atmp[1] = acc[1] - sysConf.calibrationMPU[1];
+	    atmp[2] = acc[2] - sysConf.calibrationMPU[2];
 
-	    saturateInt16(&axb, &ax);
-	    saturateInt16(&ayb, &ay);
-	    saturateInt16(&azb, &az);
+	    saturateInt16(atmp, acc);
 	    break;
-    case 'H':
+    case 2:
+	    exponentialFilter(atmp, g, acc);
 	    break;
     default:
 	    osalSysHalt("Invalid filter type in MPU Thread");
@@ -634,12 +650,12 @@ static THD_FUNCTION(Thread1, arg) {
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
       message[0]  = 'M';
-      message[1]  = (char)((ax) & 0xFF);
-      message[2]  = (char)((ax >> 8) & 0xFF);
-      message[3]  = (char)((ay) & 0xFF);
-      message[4]  = (char)((ay >> 8) & 0xFF);
-      message[5]  = (char)((az) & 0xFF);
-      message[6]  = (char)((az >> 8) & 0xFF);
+      message[1]  = (char)((acc[0]) & 0xFF);
+      message[2]  = (char)((acc[0] >> 8) & 0xFF);
+      message[3]  = (char)((acc[1]) & 0xFF);
+      message[4]  = (char)((acc[1] >> 8) & 0xFF);
+      message[5]  = (char)((acc[2]) & 0xFF);
+      message[6]  = (char)((acc[2] >> 8) & 0xFF);
       (void)chMBPost(&filled_buffers, (msg_t)pbuf, TIME_INFINITE);
     }
   }
@@ -657,8 +673,9 @@ static THD_FUNCTION(Thread2, arg) {
 
   chRegSetThreadName("ADXL345_Poll");
 
-  int16_t ax, ay, az;
-  int32_t axb, ayb, azb;
+  int16_t acc[3];
+  int32_t atmp[3];
+  int32_t g[3] = {0, 0, 0};
 
   chprintf((BaseSequentialStream *)&SD2,"ADXL Thread\r\n");
 
@@ -668,26 +685,37 @@ static THD_FUNCTION(Thread2, arg) {
     chThdEnqueueTimeoutS(&threadQueue, TIME_INFINITE);
     chSysUnlock();
 
-    ADXL345_getAcceleration(&ax, &ay, &az);
-    modifyAxis(&ax, &ay, &az);
+    ADXL345_getAcceleration(acc, acc + 1, acc + 2);
+    modifyAxis(acc, acc + 1, acc + 2);
 
-    axb = ax - sysConf.calibrationADXL[0];
-    ayb = ay - sysConf.calibrationADXL[1];
-    azb = az - sysConf.calibrationADXL[2];
+    switch(sysConf.filterType) {
+    case 0:
+	    /* Do nothing, send the accelerations as they are sampled */
+	    break;
+    case 1:
+	    atmp[0]  = acc[0] - sysConf.calibrationADXL[0];
+	    atmp[1]  = acc[1] - sysConf.calibrationADXL[1];
+	    atmp[2]  = acc[2] - sysConf.calibrationADXL[2];
 
-    saturateInt16(&axb, &ax);
-    saturateInt16(&ayb, &ay);
-    saturateInt16(&azb, &az);
+	    saturateInt16(atmp , acc);
+	    break;
+    case 2:
+	    exponentialFilter(atmp, g, acc);
+	    break;
+    default:
+	    osalSysHalt("Invalid filter type in ADXL Thread");
+	    break;
+    }
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
       message[0]  = 'A';
-      message[1]  = (char)((ax) & 0xFF);
-      message[2]  = (char)((ax >> 8) & 0xFF);
-      message[3]  = (char)((ay) & 0xFF);
-      message[4]  = (char)((ay >> 8) & 0xFF);
-      message[5]  = (char)((az) & 0xFF);
-      message[6]  = (char)((az >> 8) & 0xFF);
+      message[1]  = (char)((acc[0]) & 0xFF);
+      message[2]  = (char)((acc[0] >> 8) & 0xFF);
+      message[3]  = (char)((acc[1]) & 0xFF);
+      message[4]  = (char)((acc[1] >> 8) & 0xFF);
+      message[5]  = (char)((acc[2]) & 0xFF);
+      message[6]  = (char)((acc[2] >> 8) & 0xFF);
       (void)chMBPost(&filled_buffers, (msg_t)pbuf, TIME_INFINITE);
     }
   }

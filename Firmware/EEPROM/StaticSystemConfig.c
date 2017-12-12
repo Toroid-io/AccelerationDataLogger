@@ -38,7 +38,7 @@ void saveDefaultConfigEEPROM(const SPIConfig *spiConfig)
 {
 	struct configStructure defaultConfig;
 	defaultConfig.samplingSpeed = 800;
-	defaultConfig.accelerometerRange = 4;
+	defaultConfig.accelerometerRange = 2;
 	defaultConfig.calibrationMPU[0] = 0;
 	defaultConfig.calibrationMPU[1] = 0;
 	defaultConfig.calibrationMPU[2] = 0;
@@ -49,6 +49,7 @@ void saveDefaultConfigEEPROM(const SPIConfig *spiConfig)
 	defaultConfig.calibrationDelay = 3;
 	defaultConfig.acquisitionDelay = 3;
 	defaultConfig.magicNumber = VALID_MAGIC;
+	defaultConfig.filterType = 0;
 	EEPROM_writeBytes(&SPID1,
 			  spiConfig,
 			  0,

@@ -6,15 +6,15 @@
 #define VALID_MAGIC 0xADDA
 
 struct configStructure {
-	int16_t calibrationMPU[3];
-	int16_t calibrationADXL[3];
+	volatile int16_t calibrationMPU[3];
+	volatile int16_t calibrationADXL[3];
 	uint16_t magicNumber;
-	uint16_t samplingSpeed;
-	uint8_t accelerometerRange;
-	uint8_t calibrationDelay;
-	uint8_t acquisitionDelay;
-	uint8_t filterType;
-	bool gyroActivatedMPU;
+	volatile uint16_t samplingSpeed;
+	volatile uint8_t accelerometerRange;
+	volatile uint8_t calibrationDelay;
+	volatile uint8_t acquisitionDelay;
+	volatile uint8_t filterType;
+	volatile bool gyroActivatedMPU;
 };
 
 
