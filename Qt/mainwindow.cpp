@@ -1,7 +1,7 @@
 /* TODO
- * Continuously check USB conection
- *
- * Variable acceleration range (currently fixed)
+ *  - Continuously check USB conection
+ *  - Variable acceleration range (currently fixed)
+ *  - Get system configuration before downloading data (currently on connection)
  */
 
 #include "mainwindow.h"
@@ -101,8 +101,10 @@ void MainWindow::connectGetConfigButtonCB()
 
 void MainWindow::uploadConfigButtonCB()
 {
-    if (state != CONNECTED_IDLE)
+    if (state != CONNECTED_IDLE) {
+        writeToConsole("ERROR", "State is not IDLE");
         return;
+    }
     wThreadStr("c");
     state = SEND_UPLOAD_COMMAND;
 }
@@ -114,14 +116,10 @@ void MainWindow::getDataButtonCB()
        return;
    }
    /* Disable all buttons, these will be configured when the answer comes */
-   ui->getDataPushButton->setEnabled(false);
-   ui->connectGetConfPushButton->setEnabled(false);
-   ui->saveMPUPushButton->setEnabled(false);
-   ui->saveADXLPushButton->setEnabled(false);
-   ui->downloadProgressBar->setValue(0);
    wThreadStr("r");
    writeToConsole("INFO", "Start download");
    state = GET_DATA;
+   fillConfigurationUI();
 }
 
 void MainWindow::saveDataButtonCB()
@@ -231,8 +229,8 @@ void MainWindow::answerHandler(const QByteArray &s)
         }
         /* We have a valid device, proceed */
         writeToConsole("INFO", "Connected");
-        fillConfigurationUI(true);
         state = CONNECTED_IDLE;
+        fillConfigurationUI();
         break;
 
     case GET_DATA:
@@ -241,11 +239,9 @@ void MainWindow::answerHandler(const QByteArray &s)
             QMessageBox::information(
                         this,
                         tr("Acceleration Data Logger"),
-                        tr("No hay datos para descargar. Ha realizado la adquisición?") );
-            ui->getDataPushButton->setEnabled(true);
-            ui->connectGetConfPushButton->setEnabled(true);
-            ui->saveMPUPushButton->setEnabled(true);
-            ui->saveADXLPushButton->setEnabled(true);
+                        tr("There is no data to download. Get some data and try again!"));
+            state = CONNECTED_IDLE;
+            fillConfigurationUI();
             break;
         }
 
@@ -272,13 +268,13 @@ void MainWindow::answerHandler(const QByteArray &s)
             v3 = *((int16_t *)v3p);
 
             if (id == 'M') {
-                MPUt.append(1/800. * i/2);
+                MPUt.append(1/(double)configVariables.samplingSpeed * i/2);
                 MPUx.append((double)v1 * MPUscaleFactor);
                 MPUy.append((double)v2 * MPUscaleFactor);
                 MPUz.append((double)v3 * MPUscaleFactor);
              }
              if (id == 'A') {
-                 ADXLt.append(1/800. * i/2);
+                 ADXLt.append(1/(double)configVariables.samplingSpeed * i/2);
                  ADXLx.append((double)v1 * ADXLscaleFactor);
                  ADXLy.append((double)v2 * ADXLscaleFactor);
                  ADXLz.append((double)v3 * ADXLscaleFactor);
@@ -287,11 +283,8 @@ void MainWindow::answerHandler(const QByteArray &s)
         }
         setupPlot(ui->s1QCustomPlot, MPUt, MPUx, MPUy, MPUz);
         setupPlot(ui->s2QCustomPlot, ADXLt, ADXLx, ADXLy, ADXLz);
-        ui->getDataPushButton->setEnabled(true);
-        ui->connectGetConfPushButton->setEnabled(true);
-        ui->saveMPUPushButton->setEnabled(true);
-        ui->saveADXLPushButton->setEnabled(true);
         state = CONNECTED_IDLE;
+        fillConfigurationUI();
         break;
 
     case SEND_UPLOAD_COMMAND:
@@ -299,6 +292,7 @@ void MainWindow::answerHandler(const QByteArray &s)
         newConfigVariables.acquisitionDelay = (uint16_t)ui->sampleDelaySpinBox->value();
         newConfigVariables.calibrationDelay = (uint16_t)ui->calibrationDelaySpinBox->value();
         newConfigVariables.samplingSpeed = ui->sampleRateComboBox->currentText().toInt(nullptr);
+        newConfigVariables.filterType = ui->filterTypeComboBox->currentIndex();
         newConfigByteArray.setRawData((const char *)&newConfigVariables, sizeof(struct configStructure));
         wThreadBin(newConfigByteArray);
         state = UPLOADING_CONFIG;
@@ -306,11 +300,13 @@ void MainWindow::answerHandler(const QByteArray &s)
 
     case UPLOADING_CONFIG:
         if (strcmp(s, "--Config OK--") != 0) {
+            writeToConsole("ERORR", "Failed to upload new configuration");
+            goToDisconnectedState();
             break;
         }
-        writeToConsole("INFO", "Configuration Uploaded");
-        memcpy(&configVariables, &newConfigVariables, sizeof(struct configStructure));
-        state = CONNECTED_IDLE;
+        writeToConsole("INFO", "Configuration Uploaded. Disconnecting.");
+        /* Dirty hack, but it does the trick */
+        goToDisconnectedState();
         break;
 
     case CONNECTED_IDLE:
@@ -371,44 +367,63 @@ void MainWindow::goToDisconnectedState()
     for (const QSerialPortInfo &info : infos)
         ui->serialPortComboBox->addItem(info.portName());
 
-    fillConfigurationUI(false);
     state = DISCONNECTED;
+    fillConfigurationUI();
 }
 
-void MainWindow::fillConfigurationUI(bool enable)
+void MainWindow::fillConfigurationUI()
 {
-    if (enable) {
+    bool enableButtons;
+    switch (state) {
+    case DISCONNECTED:
+        ui->connectGetConfPushButton->setText("Connect");
+        ui->serialPortComboBox->setEnabled(true);
+        ui->updatePushButton->setEnabled(true);
+        ui->downloadProgressBar->setValue(0);
+        ui->downloadProgressBar->setEnabled(false);
+        ui->connectGetConfPushButton->setEnabled(true);
+        enableButtons = false;
+        break;
+    case CONNECTED_IDLE:
         ui->calibrationDelaySpinBox->setValue(configVariables.calibrationDelay);
         ui->sampleDelaySpinBox->setValue(configVariables.acquisitionDelay);
         ui->sampleTimeValLabel->setText(QString::number(totalTimeCalculate(configVariables.samplingSpeed)));
         ui->accelRangeValLabel->setText(QString::number(configVariables.accelerometerRange));
         ui->sampleRateComboBox->setCurrentText(QString::number(configVariables.samplingSpeed));
+        ui->filterTypeComboBox->setCurrentIndex(configVariables.filterType);
         ui->offsetMPUValLabel->setText(arrayPrint(configVariables.calibrationMPU, 'M'));
         ui->offsetADXLValLabel->setText(arrayPrint(configVariables.calibrationADXL, 'A'));
         ui->connectGetConfPushButton->setText("Disconnect");
-    } else {
-        ui->connectGetConfPushButton->setText("Connect");
+        ui->serialPortComboBox->setEnabled(false);
+        ui->updatePushButton->setEnabled(false);
+        ui->downloadProgressBar->setEnabled(true);
+        ui->connectGetConfPushButton->setEnabled(true);
+        enableButtons = true;
+        break;
+    case  GET_DATA:
+        ui->downloadProgressBar->setValue(0);
+        ui->downloadProgressBar->setEnabled(true);
+        ui->serialPortComboBox->setEnabled(false);
+        ui->updatePushButton->setEnabled(false);
+        ui->connectGetConfPushButton->setEnabled(false);
+        enableButtons = false;
+        break;
+    default:
+        break;
     }
+    ui->accelRangeValLabel->setEnabled(enableButtons);
+    ui->calibrationDelaySpinBox->setEnabled(enableButtons);
+    ui->sampleDelaySpinBox->setEnabled(enableButtons);
+    ui->sampleRateComboBox->setEnabled(enableButtons);
+    ui->filterTypeComboBox->setEnabled(enableButtons);
+    ui->sampleTimeValLabel->setEnabled(enableButtons);
+    ui->offsetMPUValLabel->setEnabled(enableButtons);
+    ui->offsetADXLValLabel->setEnabled(enableButtons);
+    ui->getDataPushButton->setEnabled(enableButtons);
+    ui->saveMPUPushButton->setEnabled(enableButtons);
+    ui->saveADXLPushButton->setEnabled(enableButtons);
+    ui->uploadConfigPushButton->setEnabled(enableButtons);
 
-    ui->accelRangeValLabel->setEnabled(enable);
-    ui->calibrationDelaySpinBox->setEnabled(enable);
-    ui->sampleDelaySpinBox->setEnabled(enable);
-    ui->sampleRateComboBox->setEnabled(enable);
-    ui->filterTypeComboBox->setEnabled(enable);
-    ui->sampleTimeValLabel->setEnabled(enable);
-    ui->offsetMPUValLabel->setEnabled(enable);
-    ui->offsetADXLValLabel->setEnabled(enable);
-    ui->filterTypeLabel->setEnabled(enable);
-
-    ui->downloadProgressBar->setEnabled(enable);
-    ui->downloadProgressBar->setValue(0);
-    ui->getDataPushButton->setEnabled(enable);
-    ui->saveMPUPushButton->setEnabled(enable);
-    ui->saveADXLPushButton->setEnabled(enable);
-    ui->uploadConfigPushButton->setEnabled(enable);
-
-    ui->serialPortComboBox->setEnabled(!enable);
-    ui->updatePushButton->setEnabled(!enable);
 }
 
 double MainWindow::totalTimeCalculate(unsigned int sampleSpeed)

@@ -45,7 +45,7 @@ private:
                    QVector<double> &x,
                    QVector<double> &y,
                    QVector<double> &z);
-    void fillConfigurationUI(bool enable);
+    void fillConfigurationUI();
     void goToDisconnectedState();
     double totalTimeCalculate(unsigned int sampleSpeed);
     QString arrayPrint(int16_t *vector, char sensor);
@@ -74,6 +74,7 @@ private:
         uint8_t accelerometerRange;
         uint8_t calibrationDelay;
         uint8_t acquisitionDelay;
+        uint8_t filterType;
         bool gyroActivatedMPU;
     } configVariables;
 };
