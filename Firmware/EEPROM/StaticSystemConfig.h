@@ -13,7 +13,8 @@ struct configStructure {
 	volatile uint8_t accelerometerRange;
 	volatile uint8_t calibrationDelay;
 	volatile uint8_t acquisitionDelay;
-	volatile uint8_t filterType;
+	volatile uint8_t MPUfilterType;
+	volatile uint8_t ADXLfilterType;
 	volatile bool gyroActivatedMPU;
 };
 

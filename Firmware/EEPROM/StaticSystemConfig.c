@@ -49,7 +49,8 @@ void saveDefaultConfigEEPROM(const SPIConfig *spiConfig)
 	defaultConfig.calibrationDelay = 3;
 	defaultConfig.acquisitionDelay = 3;
 	defaultConfig.magicNumber = VALID_MAGIC;
-	defaultConfig.filterType = 0;
+	defaultConfig.MPUfilterType = 0;
+	defaultConfig.ADXLfilterType = 0;
 	EEPROM_writeBytes(&SPID1,
 			  spiConfig,
 			  0,
@@ -59,9 +60,6 @@ void saveDefaultConfigEEPROM(const SPIConfig *spiConfig)
 void printSystemConfig(struct configStructure *sysConfig, BaseSequentialStream *stream)
 {
 	chprintf(stream, "- - - - - - - - - - - - - - - - - - - -\r\n");
-	chprintf(stream, "Sampling speed: %u\r\n", sysConfig->samplingSpeed);
-	chprintf(stream, "Accel range: %u\r\n",
-		 (uint16_t)sysConfig->accelerometerRange);
 	chprintf(stream, "Calibration MPU: %d %d %d\r\n",
 		 sysConfig->calibrationMPU[0],
 		 sysConfig->calibrationMPU[1],
@@ -70,13 +68,20 @@ void printSystemConfig(struct configStructure *sysConfig, BaseSequentialStream *
 		 sysConfig->calibrationADXL[0],
 		 sysConfig->calibrationADXL[1],
 		 sysConfig->calibrationADXL[2]);
+	chprintf(stream, "Magic: 0x%x\r\n", sysConfig->magicNumber);
+	chprintf(stream, "Sampling speed: %u\r\n", sysConfig->samplingSpeed);
+	chprintf(stream, "Accel range: %u\r\n",
+		 (uint16_t)sysConfig->accelerometerRange);
 	chprintf(stream, "Calibration delay: %u\r\n",
 		 (uint16_t)sysConfig->calibrationDelay);
 	chprintf(stream, "Acquisition delay: %u\r\n",
 		 (uint16_t)sysConfig->acquisitionDelay);
+	chprintf(stream, "MPU filter type: %u\r\n",
+		 (uint16_t)sysConfig->MPUfilterType);
+	chprintf(stream, "ADXL filter type: %u\r\n",
+		 (uint16_t)sysConfig->ADXLfilterType);
 	chprintf(stream, "Gyro MPU Activated: %u\r\n",
 		 (uint16_t)sysConfig->gyroActivatedMPU);
-	chprintf(stream, "Magic: 0x%x\r\n", sysConfig->magicNumber);
 	chprintf(stream, "- - - - - - - - - - - - - - - - - - - -\r\n");
 }
 

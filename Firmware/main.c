@@ -627,7 +627,7 @@ static THD_FUNCTION(Thread1, arg) {
 
     MPU6050_getAcceleration(acc, acc + 1, acc + 2);
 
-    switch(sysConf.filterType) {
+    switch(sysConf.MPUfilterType) {
     case  0:
 	    /* Do nothing, send the accelerations as they are sampled */
 	    break;
@@ -687,7 +687,7 @@ static THD_FUNCTION(Thread2, arg) {
     ADXL345_getAcceleration(acc, acc + 1, acc + 2);
     modifyAxis(acc, acc + 1, acc + 2);
 
-    switch(sysConf.filterType) {
+    switch(sysConf.ADXLfilterType) {
     case 0:
 	    /* Do nothing, send the accelerations as they are sampled */
 	    break;
