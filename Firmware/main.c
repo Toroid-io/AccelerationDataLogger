@@ -423,7 +423,6 @@ static void calibrateSensors(void)
   sysConf.calibrationADXL[2] = calibrationAccADXL[2] / 128;
 
   saveSystemConfigEEPROM(&eepromSPI, &sysConf);
-  //printSystemConfig(&sysConf, (BaseSequentialStream *)&SD2, false);
 
 }
 
@@ -902,7 +901,7 @@ int main(void) {
   }
   chprintf((BaseSequentialStream *)&SD2,"Good system config in EEPROM\r\n");
 
-  printSystemConfig(&sysConf, (BaseSequentialStream *)&SD2, false);
+  printSystemConfig(&sysConf, (BaseSequentialStream *)&SD2);
 
   I2CInit();
 

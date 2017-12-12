@@ -56,48 +56,27 @@ void saveDefaultConfigEEPROM(const SPIConfig *spiConfig)
 			  sizeof(struct configStructure),
 			  (uint8_t *)&defaultConfig);
 }
-void printSystemConfig(struct configStructure *sysConfig, BaseSequentialStream *stream, bool simple)
+void printSystemConfig(struct configStructure *sysConfig, BaseSequentialStream *stream)
 {
-	if (simple) {
-		chprintf(stream, "0x%x\r\n", sysConfig->magicNumber);
-		chprintf(stream, "%u\r\n", sysConfig->samplingSpeed);
-		chprintf(stream, "%u\r\n",
-			 (uint16_t)sysConfig->accelerometerRange);
-		chprintf(stream, "%d %d %d\r\n",
-			 sysConfig->calibrationMPU[0],
-			 sysConfig->calibrationMPU[1],
-			 sysConfig->calibrationMPU[2]);
-		chprintf(stream, "%d %d %d\r\n",
-			 sysConfig->calibrationADXL[0],
-			 sysConfig->calibrationADXL[1],
-			 sysConfig->calibrationADXL[2]);
-		chprintf(stream, "%u\r\n",
-			 (uint16_t)sysConfig->calibrationDelay);
-		chprintf(stream, "%u\r\n",
-			 (uint16_t)sysConfig->acquisitionDelay);
-
-	} else {
-		chprintf(stream, "- - - - - - - - - - - - - - - - - - - -\r\n");
-		chprintf(stream, "Sampling speed: %u\r\n", sysConfig->samplingSpeed);
-		chprintf(stream, "Accel range: %u\r\n",
-			 (uint16_t)sysConfig->accelerometerRange);
-		chprintf(stream, "Calibration MPU: %d %d %d\r\n",
-			 sysConfig->calibrationMPU[0],
-			 sysConfig->calibrationMPU[1],
-			 sysConfig->calibrationMPU[2]);
-		chprintf(stream, "Calibration ADXL: %d %d %d\r\n",
-			 sysConfig->calibrationADXL[0],
-			 sysConfig->calibrationADXL[1],
-			 sysConfig->calibrationADXL[2]);
-		chprintf(stream, "Calibration delay: %u\r\n",
-			 (uint16_t)sysConfig->calibrationDelay);
-		chprintf(stream, "Acquisition delay: %u\r\n",
-			 (uint16_t)sysConfig->acquisitionDelay);
-		chprintf(stream, "Gyro MPU Activated: %u\r\n",
-			 (uint16_t)sysConfig->gyroActivatedMPU);
-		chprintf(stream, "Magic: 0x%x\r\n", sysConfig->magicNumber);
-		chprintf(stream, "- - - - - - - - - - - - - - - - - - - -\r\n");
-
-	}
+	chprintf(stream, "- - - - - - - - - - - - - - - - - - - -\r\n");
+	chprintf(stream, "Sampling speed: %u\r\n", sysConfig->samplingSpeed);
+	chprintf(stream, "Accel range: %u\r\n",
+		 (uint16_t)sysConfig->accelerometerRange);
+	chprintf(stream, "Calibration MPU: %d %d %d\r\n",
+		 sysConfig->calibrationMPU[0],
+		 sysConfig->calibrationMPU[1],
+		 sysConfig->calibrationMPU[2]);
+	chprintf(stream, "Calibration ADXL: %d %d %d\r\n",
+		 sysConfig->calibrationADXL[0],
+		 sysConfig->calibrationADXL[1],
+		 sysConfig->calibrationADXL[2]);
+	chprintf(stream, "Calibration delay: %u\r\n",
+		 (uint16_t)sysConfig->calibrationDelay);
+	chprintf(stream, "Acquisition delay: %u\r\n",
+		 (uint16_t)sysConfig->acquisitionDelay);
+	chprintf(stream, "Gyro MPU Activated: %u\r\n",
+		 (uint16_t)sysConfig->gyroActivatedMPU);
+	chprintf(stream, "Magic: 0x%x\r\n", sysConfig->magicNumber);
+	chprintf(stream, "- - - - - - - - - - - - - - - - - - - -\r\n");
 }
 
