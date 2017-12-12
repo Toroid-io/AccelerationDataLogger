@@ -15,7 +15,7 @@
 /* Global variables - RTOS stuff                                             */
 /*===========================================================================*/
 
-enum state {IDLE,
+volatile enum state {IDLE,
 	CALIBRATION,
 	START_ACQUISITION,
 	ACQUISITION,
@@ -298,6 +298,16 @@ void modifyAxis(int16_t *ax, int16_t *ay, int16_t *az)
 	tmp = *ax;
 	*ax = -*ay;
 	*ay = -tmp;
+}
+
+void saturateInt16(int32_t *i32, int16_t *i16)
+{
+	if (*i32 > INT16_MAX)
+		*i16 = INT16_MAX;
+	else if (*i32 < INT16_MIN)
+		*i16 = INT16_MIN;
+	else
+		*i16 = (int16_t)*i32;
 }
 
 static void led2off(void *arg) {
@@ -601,30 +611,25 @@ static THD_FUNCTION(Thread1, arg) {
 
     MPU6050_getAcceleration(&ax, &ay, &az);
 
-    axb = ax - sysConf.calibrationMPU[0];
-    ayb = ay - sysConf.calibrationMPU[1];
-    azb = az - sysConf.calibrationMPU[2];
+    switch(sysConf.filterType) {
+    case  'R':
+	    /* Do nothing, send the accelerations as they are sampled */
+	    break;
+    case 'O':
+	    axb = ax - sysConf.calibrationMPU[0];
+	    ayb = ay - sysConf.calibrationMPU[1];
+	    azb = az - sysConf.calibrationMPU[2];
 
-    if (axb > INT16_MAX)
-	    ax = INT16_MAX;
-    else if (axb < INT16_MIN)
-	    ax = INT16_MIN;
-    else
-	    ax = (int16_t)axb;
-
-    if (ayb > INT16_MAX)
-	    ay = INT16_MAX;
-    else if (ayb < INT16_MIN)
-	    ay = INT16_MIN;
-    else
-	    ay = (int16_t)ayb;
-
-    if (azb > INT16_MAX)
-	    az = INT16_MAX;
-    else if (azb < INT16_MIN)
-	    az = INT16_MIN;
-    else
-	    az = (int16_t)azb;
+	    saturateInt16(&axb, &ax);
+	    saturateInt16(&ayb, &ay);
+	    saturateInt16(&azb, &az);
+	    break;
+    case 'H':
+	    break;
+    default:
+	    osalSysHalt("Invalid filter type in MPU Thread");
+	    break;
+    }
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;
@@ -670,26 +675,9 @@ static THD_FUNCTION(Thread2, arg) {
     ayb = ay - sysConf.calibrationADXL[1];
     azb = az - sysConf.calibrationADXL[2];
 
-    if (axb > INT16_MAX)
-	    ax = INT16_MAX;
-    else if (axb < INT16_MIN)
-	    ax = INT16_MIN;
-    else
-	    ax = (int16_t)axb;
-
-    if (ayb > INT16_MAX)
-	    ay = INT16_MAX;
-    else if (ayb < INT16_MIN)
-	    ay = INT16_MIN;
-    else
-	    ay = (int16_t)ayb;
-
-    if (azb > INT16_MAX)
-	    az = INT16_MAX;
-    else if (azb < INT16_MIN)
-	    az = INT16_MIN;
-    else
-	    az = (int16_t)azb;
+    saturateInt16(&axb, &ax);
+    saturateInt16(&ayb, &ay);
+    saturateInt16(&azb, &az);
 
     if (chMBFetch(&free_buffers, (msg_t *)&pbuf, TIME_INFINITE) == MSG_OK) {
       char *message = (char *)pbuf;

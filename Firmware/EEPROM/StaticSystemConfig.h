@@ -13,6 +13,7 @@ struct configStructure {
 	uint8_t accelerometerRange;
 	uint8_t calibrationDelay;
 	uint8_t acquisitionDelay;
+	uint8_t filterType;
 	bool gyroActivatedMPU;
 };
 
