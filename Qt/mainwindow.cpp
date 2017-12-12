@@ -292,7 +292,8 @@ void MainWindow::answerHandler(const QByteArray &s)
         newConfigVariables.acquisitionDelay = (uint16_t)ui->sampleDelaySpinBox->value();
         newConfigVariables.calibrationDelay = (uint16_t)ui->calibrationDelaySpinBox->value();
         newConfigVariables.samplingSpeed = ui->sampleRateComboBox->currentText().toInt(nullptr);
-        newConfigVariables.filterType = ui->filterTypeComboBox->currentIndex();
+        newConfigVariables.MPUfilterType = ui->MPUfilterTypeComboBox->currentIndex();
+        newConfigVariables.ADXLfilterType = ui->ADXLfilterTypeComboBox->currentIndex();
         newConfigByteArray.setRawData((const char *)&newConfigVariables, sizeof(struct configStructure));
         wThreadBin(newConfigByteArray);
         state = UPLOADING_CONFIG;
@@ -390,7 +391,8 @@ void MainWindow::fillConfigurationUI()
         ui->sampleTimeValLabel->setText(QString::number(totalTimeCalculate(configVariables.samplingSpeed)));
         ui->accelRangeValLabel->setText(QString::number(configVariables.accelerometerRange));
         ui->sampleRateComboBox->setCurrentText(QString::number(configVariables.samplingSpeed));
-        ui->filterTypeComboBox->setCurrentIndex(configVariables.filterType);
+        ui->MPUfilterTypeComboBox->setCurrentIndex(configVariables.MPUfilterType);
+        ui->ADXLfilterTypeComboBox->setCurrentIndex(configVariables.ADXLfilterType);
         ui->offsetMPUValLabel->setText(arrayPrint(configVariables.calibrationMPU, 'M'));
         ui->offsetADXLValLabel->setText(arrayPrint(configVariables.calibrationADXL, 'A'));
         ui->connectGetConfPushButton->setText("Disconnect");
@@ -415,7 +417,8 @@ void MainWindow::fillConfigurationUI()
     ui->calibrationDelaySpinBox->setEnabled(enableButtons);
     ui->sampleDelaySpinBox->setEnabled(enableButtons);
     ui->sampleRateComboBox->setEnabled(enableButtons);
-    ui->filterTypeComboBox->setEnabled(enableButtons);
+    ui->MPUfilterTypeComboBox->setEnabled(enableButtons);
+    ui->ADXLfilterTypeComboBox->setEnabled(enableButtons);
     ui->sampleTimeValLabel->setEnabled(enableButtons);
     ui->offsetMPUValLabel->setEnabled(enableButtons);
     ui->offsetADXLValLabel->setEnabled(enableButtons);

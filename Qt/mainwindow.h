@@ -74,7 +74,8 @@ private:
         uint8_t accelerometerRange;
         uint8_t calibrationDelay;
         uint8_t acquisitionDelay;
-        uint8_t filterType;
+        uint8_t MPUfilterType;
+        uint8_t ADXLfilterType;
         bool gyroActivatedMPU;
     } configVariables;
 };
