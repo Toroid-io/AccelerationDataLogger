@@ -134,7 +134,7 @@ void MainWindow::saveDataButtonCB()
             QMessageBox::information(
                         this,
                         tr("Acceleration Data Logger"),
-                        tr("No hay datos en el sensor MPU. Ha realizado la descarga?") );
+                        tr("There is no data in the MPU plot.") );
             return;
         }
     }
@@ -144,7 +144,7 @@ void MainWindow::saveDataButtonCB()
             QMessageBox::information(
                         this,
                         tr("Acceleration Data Logger"),
-                        tr("No hay datos en el sensor ADXL. Ha realizado la descarga?") );
+                        tr("There is no data in the ADXL plot.") );
             return;
         }
 
